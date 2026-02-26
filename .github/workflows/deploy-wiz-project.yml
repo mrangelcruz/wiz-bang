@@ -1,0 +1,132 @@
+name: Deploy Wiz Project (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Environment to deploy (dev/test/prod)"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, test, prod]
+
+  push:
+    branches: [wiz-test-project]
+    paths:
+      - "wiz-test-project/**"
+      - ".github/workflows/deploy-wiz-project.yml"
+
+  # NOTE: This will only run for PRs whose base branch has this workflow.
+  # If your PR targets main and main doesn't have this workflow, it won't run.
+  pull_request:
+    paths:
+      - "wiz-test-project/**"
+      - ".github/workflows/deploy-wiz-project.yml"
+
+jobs:
+  wiz-introspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r wiz-test-project/scripts/python/requirements.txt
+
+      - name: Run Wiz GraphQL introspection
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_API_URL: ${{ secrets.WIZ_API_URL }}
+        run: |
+          python wiz-test-project/scripts/python/wiz_graphql_debug.py \
+            --out-dir wiz-test-project/build_artifacts
+
+      - name: Upload introspection artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiz-introspection
+          path: wiz-test-project/build_artifacts/
+
+  plan:
+    needs: [wiz-introspect]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wiz-test-project
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.1
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform Init
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: terraform init -upgrade
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        env:
+          ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: terraform plan -var-file="tfvars/${ENV}.tfvars.example" -out=tfplan
+
+      - name: Upload plan artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.env }}
+          path: wiz-test-project/tfplan
+
+  apply:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wiz-test-project
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.1
+        with:
+          terraform_version: 1.6.6
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.env }}
+          path: wiz-test-project
+      - name: Debug downloaded files
+        run: |
+          echo "PWC=$(pwd)"
+          ls -la
+          find . -maxdepth 2 -type f -print
+
+      - name: Terraform Init
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: terraform init -upgrade
+
+      - name: Terraform Apply
+        env:
+          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+        run: terraform apply -auto-approve tfplan

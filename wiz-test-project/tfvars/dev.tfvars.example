@@ -1,0 +1,2 @@
+project_name        = "proc-test-project-dv"
+project_description = "POC Wiz project creatd via Terraform (DV)"
