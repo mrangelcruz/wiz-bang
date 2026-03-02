@@ -50,11 +50,17 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
 
 **Next steps (in order):**
 
-1. **Run `terraform import` locally** (one-time, not in CI):
+1. **Add `WIZ_API_URL` GitHub secret** (if not already done):
+   - Repo → Settings → Secrets and variables → Actions → New repository secret
+   - Name: `WIZ_API_URL`, Value: `https://api.us9.app.wiz.io/graphql`
+   - Workflow already references it on line 43 — no workflow changes needed
+
+2. **Run `terraform import` locally** (one-time, not in CI):
    ```bash
    cd wiz-test-project
    export WIZ_CLIENT_ID=...
    export WIZ_CLIENT_SECRET=...
+   export WIZ_API_URL=https://api.us9.app.wiz.io/graphql
    terraform init
    terraform import \
      -var-file=tfvars/prod.tfvars.example \
@@ -62,16 +68,16 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
      41554e20-68eb-5986-a86e-d27233e3c752
    ```
 
-2. **Dump full state** to get all Wiz-internal UUIDs:
+3. **Dump full state** to get all Wiz-internal UUIDs:
    ```bash
    terraform show -json | python3 -m json.tool > imported_state.json
    ```
 
-3. **Expand `main.tf`** using `imported_state.json` as source of truth (risk_profile, cloud_account_links, parent_project_id, etc.)
+4. **Expand `main.tf`** using `imported_state.json` as source of truth (risk_profile, cloud_account_links, parent_project_id, etc.)
 
-4. **Run `terraform plan`** until no changes — IaC mirrors live project
+5. **Run `terraform plan`** until no changes — IaC mirrors live project
 
-5. **Add remote state backend** (S3, Azure Blob, or Terraform Cloud) — no backend configured yet; required for CI plan/apply to work long-term
+6. **Add remote state backend** (S3, Azure Blob, or Terraform Cloud) — no backend configured yet; required for CI plan/apply to work long-term
 
 ---
 
@@ -104,7 +110,7 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
 
 - `WIZ_CLIENT_ID`
 - `WIZ_CLIENT_SECRET`
-- `WIZ_API_URL` (Wiz GraphQL endpoint, e.g. `https://api.<tenant>.wiz.io/graphql`)
+- `WIZ_API_URL` = `https://api.us9.app.wiz.io/graphql` (confirmed via browser Network tab)
 
 ## GraphQL Mutations of Interest
 
