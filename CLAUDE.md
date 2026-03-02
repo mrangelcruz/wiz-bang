@@ -1,5 +1,11 @@
 # wiz-bang — Session State
 
+## Session Convention
+
+Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add/commit/push automatically. User exits terminal manually afterward.
+
+---
+
 ## Project Goals
 
 1. **Task 1: Build a Wiz Azure Terraform provider**
@@ -12,11 +18,9 @@
 
 ---
 
-## Current State (end of session)
+## Current State
 
 ### Task 1 — Azure provider: introspection phase
-
-We identified that `createConnector` / `updateConnector` / `deleteConnector` are the key GraphQL mutations for cloud connectors.
 
 - `wiz-test-project/scripts/python/wiz_graphql_debug.py` deep-introspects `CreateConnectorInput` and `UpdateConnectorInput` via BFS, writing each type to `wiz-test-project/build_artifacts/wiz_type_<TypeName>.json` and a combined rollup to `wiz_types_combined.json`
 - `.github/workflows/deploy-wiz-project.yml` has a `wiz-introspect` job that runs the script and uploads `build_artifacts/` as the `wiz-introspection` artifact
@@ -26,34 +30,27 @@ We identified that `createConnector` / `updateConnector` / `deleteConnector` are
 - `wiz_mutations_filtered.txt`
 - `wiz_typename.json`
 
-**Next step for Task 1:** Run the workflow to generate `wiz_types_combined.json`, which reveals the full `CreateConnectorInput` schema (subscription ID, tenant ID, auth method, etc.) — the blueprint for the Terraform resource schema.
+**Next step:** Run the workflow to generate `wiz_types_combined.json` — the blueprint for the Terraform resource schema.
 
 ---
 
 ### Task 2 — Terraform import of GEICO Cyber Prod
 
-**What was done this session:**
-- Identified the target project: `GEICO Cyber Prod` (UUID: `41554e20-68eb-5986-a86e-d27233e3c752`)
-- Located the project under Settings → Projects → GEICO (folder) → GEICO Cyber Prod (folder) → GEICO Cyber Prod
-- Gathered the project's known config from the Wiz Dashboard:
-  - Category: `Environment`
-  - Parent folder: `GEICO Cyber`
-  - Business Impact: `MBI` (Medium)
-  - 11 linked cloud accounts (mix of AWS, Azure, GCP) — Wiz-internal UUIDs not yet known
-  - Project Owner: listed but name not captured
-- Created `wiz-test-project/tfvars/prod.tfvars.example` with:
-  ```
-  project_name        = "GEICO Cyber Prod"
-  project_description = ""
-  ```
-- Added Wiz provider reference docs to `wiz-test-project/documents/`
-- All changes committed and pushed to `main` on `github.com/mrangelcruz/wiz-bang`
+**Completed:**
+- Target project identified: `GEICO Cyber Prod` (UUID: `41554e20-68eb-5986-a86e-d27233e3c752`)
+- Project located under: Settings → Projects → GEICO → GEICO Cyber Prod (folder) → GEICO Cyber Prod
+- Known config from Wiz Dashboard:
+  - Category: `Environment`, Parent folder: `GEICO Cyber`, Business Impact: `MBI`
+  - 11 linked cloud accounts (AWS, Azure, GCP) — Wiz-internal UUIDs not yet known
+- `wiz-test-project/tfvars/prod.tfvars.example` created with `project_name = "GEICO Cyber Prod"`
+- Wiz provider reference docs added to `wiz-test-project/documents/`
+- All committed and pushed to `main`
 
-**Import is NOT yet done** — the `terraform import` command has not been run yet.
+**`terraform import` has NOT been run yet.**
 
-**Next steps for Task 2 (in order):**
+**Next steps (in order):**
 
-1. **Run `terraform import` locally** (one-time operation, not in CI):
+1. **Run `terraform import` locally** (one-time, not in CI):
    ```bash
    cd wiz-test-project
    export WIZ_CLIENT_ID=...
@@ -65,16 +62,16 @@ We identified that `createConnector` / `updateConnector` / `deleteConnector` are
      41554e20-68eb-5986-a86e-d27233e3c752
    ```
 
-2. **Dump the full imported state** to discover all Wiz-internal UUIDs:
+2. **Dump full state** to get all Wiz-internal UUIDs:
    ```bash
    terraform show -json | python3 -m json.tool > imported_state.json
    ```
 
-3. **Expand `main.tf`** to match the full project config (risk_profile, cloud_account_links, parent_project_id, etc.) using `imported_state.json` as the source of truth
+3. **Expand `main.tf`** using `imported_state.json` as source of truth (risk_profile, cloud_account_links, parent_project_id, etc.)
 
-4. **Run `terraform plan`** until it shows no changes — that means IaC perfectly mirrors the live project
+4. **Run `terraform plan`** until no changes — IaC mirrors live project
 
-5. **Consider a remote state backend** — currently no backend is configured, so state is local only. For CI plan/apply to work long-term, state needs to be persisted (S3, Azure Blob, or Terraform Cloud)
+5. **Add remote state backend** (S3, Azure Blob, or Terraform Cloud) — no backend configured yet; required for CI plan/apply to work long-term
 
 ---
 
@@ -92,16 +89,16 @@ We identified that `createConnector` / `updateConnector` / `deleteConnector` are
 | `wiz-test-project/documents/` | Wiz provider + wiz_project schema reference docs |
 | `.github/workflows/deploy-wiz-project.yml` | CI: introspect → plan → apply |
 
-## Key Facts
+## Key Facts & Conventions
 
 - **Target project UUID:** `41554e20-68eb-5986-a86e-d27233e3c752`
-- **tfvars convention:** files use `.tfvars.example` extension (not `.tfvars`) — required by the CI runner
-- **Triggering the workflow from a feature branch** (since workflow doesn't exist on default branch in the work repo):
+- **tfvars convention:** `.tfvars.example` extension only — `.tfvars` not allowed by CI runner
+- **No `.gitignore`** in this repo
+- **Workflow not on default branch at work** — trigger via:
   ```bash
   gh workflow run deploy-wiz-project.yml --ref <your-feature-branch> -f env=prod
   gh run watch
   ```
-- **No `.gitignore` exists** in this repo
 
 ## Required Secrets (GitHub + local env)
 
@@ -114,5 +111,3 @@ We identified that `createConnector` / `updateConnector` / `deleteConnector` are
 - `createConnector` → `CreateConnectorInput`
 - `updateConnector` → `UpdateConnectorInput`
 - `deleteConnector` → `DeleteConnectorInput`
-
-These are the mutations the future Azure provider resource will wrap.
