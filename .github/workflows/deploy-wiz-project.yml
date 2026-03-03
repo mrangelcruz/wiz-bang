@@ -4,31 +4,26 @@ on:
   workflow_dispatch:
     inputs:
       env:
-        description: "Environment to deploy (dev/test/prod)"
+        description: "Environment to deploy"
         required: true
-        default: dev
+        default: dv
         type: choice
-        options: [dev, test, prod]
+        options: [dv, pd]
 
   push:
-    branches: [wiz-test-project]
+    branches: [feature/wiz-test-project]
     paths:
-      - "wiz-test-project/**"
+      - "wiz-projects/**"
       - ".github/workflows/deploy-wiz-project.yml"
 
-  # NOTE: This will only run for PRs whose base branch has this workflow.
-  # If your PR targets main and main doesn't have this workflow, it won't run.
   pull_request:
     paths:
-      - "wiz-test-project/**"
+      - "wiz-projects/**"
       - ".github/workflows/deploy-wiz-project.yml"
 
 jobs:
   plan:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: wiz-test-project
 
     steps:
       - uses: actions/checkout@v4
@@ -39,38 +34,40 @@ jobs:
           terraform_version: 1.6.6
 
       - name: Terraform Init
+        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         env:
           WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
         run: terraform init -upgrade
 
       - name: Terraform Format Check
+        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         run: terraform fmt -check -recursive
 
       - name: Terraform Validate
+        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         run: terraform validate
 
       - name: Terraform Plan
+        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         env:
-          ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
           WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-        run: terraform plan -var-file="tfvars/${ENV}.tfvars.example" -out=tfplan
+        run: |
+          ENV=${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
+          terraform plan -var-file="tfvars/${ENV}.tfvars.example" -out=tfplan
 
       - name: Upload plan artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ inputs.env }}
-          path: wiz-test-project/tfplan
+          path: wiz-projects/environments/${{ inputs.env }}/tfplan
 
   apply:
     if: github.event_name == 'workflow_dispatch'
     needs: [plan]
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: wiz-test-project
 
     steps:
       - uses: actions/checkout@v4
@@ -84,20 +81,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ inputs.env }}
-          path: wiz-test-project
-      - name: Debug downloaded files
-        run: |
-          echo "PWC=$(pwd)"
-          ls -la
-          find . -maxdepth 2 -type f -print
+          path: wiz-projects/environments/${{ inputs.env }}
 
       - name: Terraform Init
+        working-directory: wiz-projects/environments/${{ inputs.env }}
         env:
           WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
         run: terraform init -upgrade
 
       - name: Terraform Apply
+        working-directory: wiz-projects/environments/${{ inputs.env }}
         env:
           WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
           WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}

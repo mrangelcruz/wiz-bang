@@ -1,6 +1,6 @@
 variable "project_name" {
   type        = string
-  description = "Wiz Project name to create"
+  description = "Wiz Project name"
 }
 
 variable "project_description" {
