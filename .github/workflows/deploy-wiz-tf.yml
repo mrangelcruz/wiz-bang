@@ -1,0 +1,196 @@
+name: "wiz-terraform-deployment"
+run-name: Wiz `terraform ${{ github.event.inputs.action }} in ${{ github.event.inputs.environment }}` by @${{ github.actor }}
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Select Terraform action to perform'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'DV'
+        type: choice
+        options:
+          - DV # gw-cybersec-sbx-001
+          - UT # gw-cybersec-sbx-002
+          - PD # gw-cloudsec-pd-001
+      import_existing:
+        description: 'Import existing WIZ resources (first-time setup)'
+        required: false
+        default: false
+        type: boolean
+      confirm_critical_op:
+        description: 'Type action name to confirm (apply only)'
+        required: false
+        type: string
+
+env:
+  AWS_REGION: "us-east-1"
+  TF_DIR: "./terraform/environments/${{ github.event.inputs.environment }}"
+  # TODO: add PD account ID once created. Currently, implementation will default to DV when selecting PD.
+  AWS_ACCOUNT_ID: ${{ github.event.inputs.environment == 'DV' && '938436319834' || github.event.inputs.environment == 'UT' && '132634713021' || '018139544949' }}
+
+concurrency:
+  group: workflow-concurrency-lock
+  cancel-in-progress: false
+
+jobs:
+  wiz-terraform-action:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    timeout-minutes: 30
+    env:
+      TF_VAR_wiz_client_id: ${{ github.event.inputs.environment == 'DV' && secrets.WIZ_CLIENT_ID_DV || github.event.inputs.environment == 'UT' && secrets.WIZ_CLIENT_ID_UT || github.event.inputs.environment == 'PD' && secrets.WIZ_CLIENT_ID_PD || '' }}
+      TF_VAR_wiz_client_secret: ${{ github.event.inputs.environment == 'DV' && secrets.WIZ_CLIENT_SECRET_DV || github.event.inputs.environment == 'UT' && secrets.WIZ_CLIENT_SECRET_UT || github.event.inputs.environment == 'PD' && secrets.WIZ_CLIENT_SECRET_PD || '' }}
+      TF_VAR_slack_bot_token: ${{ github.event.inputs.environment == 'DV' && secrets.SLACK_BOT_TOKEN_DV || github.event.inputs.environment == 'UT' && secrets.SLACK_BOT_TOKEN_UT || github.event.inputs.environment == 'PD' && secrets.SLACK_BOT_TOKEN_PD || '' }}
+    steps:
+      # Checkout Repository
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # Debug and validate secrets
+      - name: Validate Secrets
+        run: |  
+          echo "[INFO]: Validating required secrets for environment '${{ github.event.inputs.environment }}'..."
+          [ -n "$TF_VAR_wiz_client_id" ] && [ -n "$TF_VAR_wiz_client_secret" ] && [ -n "$TF_VAR_slack_bot_token" ] || { 
+            echo "[ERROR]: Missing secrets for environment '${{ github.event.inputs.environment }}' - check WIZ_*_${{ github.event.inputs.environment }} secrets"; exit 1; 
+          }
+          echo "[INFO]: All secrets validated ✓"
+      # Validate Inputs: Apply/Destroy written confirmation before proceeding with critical operations
+      - name: Validate Apply Confirmation
+        if: github.event.inputs.action == 'apply'
+        run: |
+          if [ "${{ github.event.inputs.confirm_critical_op }}" != "apply" ]; then
+            echo "[ERROR]: You must type 'apply' to proceed with the `terraform apply` operation"
+            exit 1
+          fi
+          echo "[INFO]: Validated user confirmation for `Apply` operation"
+      # Configure AWS Credentials for Terraform operations
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/admin/gw-accountautomation-role
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: WIZ-${{ github.event.inputs.environment }}-DEPLOYMENT-${{ github.run_number }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.1
+      
+      - name: Terraform Format Check
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          if ! terraform fmt -check; then
+            echo "[ERROR]: Terraform files are not properly formatted"
+            echo "[INFO]: Run 'terraform fmt' to fix formatting"
+            exit 1
+          fi
+          echo "[INFO]: Format check passed"
+      
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Initializing Terraform..."
+          terraform init -no-color
+          echo "[INFO]: Terraform initialization completed"
+      
+      - name: Stale Locks Check and Cleanup
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Checking for stale locks..."
+          # Check if there's a lock and extract the lock ID
+          if terraform plan -no-color -detailed-exitcode -input=false 2>&1 | grep -q "Lock Info:"; then
+            echo "[WARNING]: Found stale lock, attempting to unlock..."
+            LOCK_ID=$(terraform plan -no-color -detailed-exitcode -input=false 2>&1 | grep -A 10 "Lock Info:" | grep "ID:" | awk '{print $2}' | head -1)
+            if [ ! -z "$LOCK_ID" ]; then
+              echo "[INFO]: Attempting to unlock ID: $LOCK_ID"
+              terraform force-unlock -force "$LOCK_ID" || echo "[WARNING]: Could not unlock $LOCK_ID"
+            fi
+          else
+            echo "[INFO]: No stale locks found"
+          fi
+      
+      - name: Import Existing WIZ Resources
+        if: github.event.inputs.import_existing == 'true'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Importing existing WIZ resources..."
+          
+          # Import SAML IdP if it exists in WIZ but not in state
+          if ! terraform state show wiz_saml_idp.geico &> /dev/null; then
+            echo "[INFO]: Attempting to import SAML IdP..."
+            terraform import wiz_saml_idp.geico GEICO || echo "[WARNING]: SAML IdP import failed or doesn't exist"
+          else
+            echo "[INFO]: SAML IdP already in state"
+          fi
+          
+          # Import SAML Group Mappings
+          if ! terraform state show wiz_saml_group_mapping.geico_group_mappings &> /dev/null; then
+            echo "[INFO]: Attempting to import SAML Group Mappings..."
+            terraform import wiz_saml_group_mapping.geico_group_mappings GEICO || echo "[WARNING]: SAML Group Mappings import failed or don't exist"
+          else
+            echo "[INFO]: SAML Group Mappings already in state"
+          fi
+          
+          echo "[INFO]: Import step completed"
+      
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Validating Terraform configuration..."
+          terraform validate -no-color
+          echo "[INFO]: Terraform validation passed"
+      
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}    
+        run: |
+          echo "[INFO]: Creating Terraform plan..."
+          terraform plan -no-color -detailed-exitcode -lock-timeout=5m -out=tfplan
+          echo "[INFO]: Terraform plan created"
+          
+      - name: Plan Summary
+        run: |
+          echo "[INFO]: Plan outcome: ${{ steps.plan.outcome }}"
+          echo "[INFO]: Plan exit code: ${{ steps.plan.outputs.exitcode }}"
+          
+          if [ "${{ steps.plan.outputs.exitcode }}" == "0" ]; then
+            echo "[INFO] No changes required - infrastructure is up-to-date"
+          elif [ "${{ steps.plan.outputs.exitcode }}" == "2" ]; then
+            echo "[INFO] Changes detected - ready for deployment"
+          else
+            echo "[ERROR] Plan failed - check configuration (exit code: ${{ steps.plan.outputs.exitcode }})"
+            exit 1
+          fi
+      
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply' && steps.plan.outputs.exitcode == '2'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Applying Terraform changes..."
+          terraform apply -auto-approve -no-color -lock-timeout=5m tfplan
+          echo "[INFO]: Terraform apply completed successfully"
+      
+      - name: Cleanup Locks on Failure
+        if: failure()
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Job failed, cleaning up any remaining locks..."
+          if terraform plan -no-color -detailed-exitcode -input=false 2>&1 | grep -q "Lock Info:"; then
+            LOCK_ID=$(terraform plan -no-color -detailed-exitcode -input=false 2>&1 | grep -A 10 "Lock Info:" | grep "ID:" | awk '{print $2}' | head -1)
+            if [ ! -z "$LOCK_ID" ]; then
+              echo "[INFO]: Force unlocking ID: $LOCK_ID"
+              terraform force-unlock -force "$LOCK_ID" || true
+            fi
+          fi 
+

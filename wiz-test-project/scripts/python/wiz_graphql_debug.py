@@ -13,12 +13,6 @@ import requests
 DEFAULT_TOKEN_URL = "https://auth.app.wiz.io/oauth/token"
 FILTER_RE = re.compile(r"(azure|deployment|connector|cloudAccount|cloud|subscription)", re.I)
 
-# Mutations we want to deeply introspect (follow all nested INPUT_OBJECT types)
-DEEP_INTROSPECT_ROOTS = [
-    "CreateConnectorInput",
-    "UpdateConnectorInput",
-]
-
 INTROSPECTION_MUTATIONS = """
 query IntrospectMutations {
   __schema {
@@ -30,41 +24,6 @@ query IntrospectMutations {
           type { kind name ofType { kind name ofType { kind name } } }
         }
       }
-    }
-  }
-}
-"""
-
-INTROSPECT_TYPE_QUERY = """
-query IntrospectInputType($name: String!) {
-  __type(name: $name) {
-    name
-    kind
-    description
-    inputFields {
-      name
-      description
-      defaultValue
-      type {
-        kind
-        name
-        ofType {
-          kind
-          name
-          ofType {
-            kind
-            name
-            ofType {
-              kind
-              name
-            }
-          }
-        }
-      }
-    }
-    enumValues {
-      name
-      description
     }
   }
 }
@@ -137,57 +96,6 @@ def write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _unwrap_type_name(type_node: Optional[Dict[str, Any]]) -> Optional[str]:
-    """Walk NON_NULL / LIST wrappers to find the named type."""
-    while type_node is not None:
-        if type_node.get("name"):
-            return type_node["name"]
-        type_node = type_node.get("ofType")
-    return None
-
-
-def introspect_type_deep(
-    api_url: str,
-    token: str,
-    root_name: str,
-    timeout: int,
-    out_dir: Path,
-) -> Dict[str, Any]:
-    """
-    Recursively introspect an INPUT_OBJECT (or ENUM) type and all INPUT_OBJECT
-    types reachable from its inputFields.  Returns a dict keyed by type name.
-    """
-    visited: Dict[str, Any] = {}
-    queue = [root_name]
-
-    while queue:
-        name = queue.pop(0)
-        if name in visited:
-            continue
-
-        result = gql(api_url, token, INTROSPECT_TYPE_QUERY, {"name": name}, timeout)
-        type_def = (result.get("data") or {}).get("__type")
-        if not type_def:
-            visited[name] = None
-            continue
-
-        visited[name] = type_def
-
-        # Enqueue any INPUT_OBJECT fields we haven't seen yet
-        for field in type_def.get("inputFields") or []:
-            child_name = _unwrap_type_name(field.get("type"))
-            if child_name and child_name not in visited:
-                # Only follow non-scalar types (scalars have no inputFields)
-                child_result = gql(
-                    api_url, token, INTROSPECT_TYPE_QUERY, {"name": child_name}, timeout
-                )
-                child_def = (child_result.get("data") or {}).get("__type")
-                if child_def and child_def.get("kind") in ("INPUT_OBJECT", "ENUM"):
-                    queue.append(child_name)
-
-    return visited
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Debug Wiz GraphQL: sanity + introspect mutation names")
     ap.add_argument("--api-url", default=os.getenv("WIZ_API_URL"), help="Wiz GraphQL URL (or env WIZ_API_URL)")
@@ -236,21 +144,8 @@ def main() -> None:
     for n in names:
         print(n)
 
-    # Deep introspect each root input type
-    combined: Dict[str, Any] = {}
-    for root_name in DEEP_INTROSPECT_ROOTS:
-        print(f"\nDeep introspecting {root_name} ...")
-        type_map = introspect_type_deep(api_url, token, root_name, args.timeout_seconds, out_dir)
-        combined.update(type_map)
-        for type_name, type_def in type_map.items():
-            safe_name = re.sub(r"[^A-Za-z0-9_\-]", "_", type_name)
-            write_json(out_dir / f"wiz_type_{safe_name}.json", type_def)
-            status = "OK" if type_def else "NOT FOUND"
-            print(f"  {type_name}: {status}")
-
-    write_json(out_dir / "wiz_types_combined.json", combined)
-    print(f"\nWrote {len(combined)} types to {out_dir}/wiz_types_combined.json")
-
 
 if __name__ == "__main__":
     main()
+
+

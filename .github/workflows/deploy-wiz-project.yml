@@ -24,35 +24,7 @@ on:
       - ".github/workflows/deploy-wiz-project.yml"
 
 jobs:
-  wiz-introspect:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: pip install -r wiz-test-project/scripts/python/requirements.txt
-
-      - name: Run Wiz GraphQL introspection
-        env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-          WIZ_API_URL: ${{ secrets.WIZ_API_URL }}
-        run: |
-          python wiz-test-project/scripts/python/wiz_graphql_debug.py \
-            --out-dir wiz-test-project/build_artifacts
-
-      - name: Upload introspection artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wiz-introspection
-          path: wiz-test-project/build_artifacts/
-
   plan:
-    needs: [wiz-introspect]
     runs-on: ubuntu-latest
     defaults:
       run:

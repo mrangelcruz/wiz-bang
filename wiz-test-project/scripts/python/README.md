@@ -1,3 +1,5 @@
+
+
 # Wiz GraphQL Introspection (POC)
 
 ⚠️ **Temporary / Proof-of-Concept tooling**
@@ -56,5 +58,5 @@ Outputs:
 | Terraform | Long-term |
 
 Safe to delete this entire directory once the Terraform provider
-supports Azure connectors.
+supports Azure connectors. 
 
