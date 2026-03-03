@@ -1,4 +1,4 @@
-name: Debug Wiz GraphQL (Introspect)
+name: Wiz GraphQL Introspection
 
 on:
   workflow_dispatch:
@@ -8,97 +8,88 @@ on:
         required: true
         default: "https://api.us9.app.wiz.io/graphql"
 
+env:
+  GO_VERSION: "1.22"
+  GOPROXY: https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all
+  GONOSUMDB: github.com/geico-private,dev.azure.com
+
 jobs:
   introspect:
-    runs-on: ubuntu-latest
-    env:
-      # Tenant/region-specific
-      WIZ_API_URL: ${{ inputs.wiz_api_url }}
+    name: Introspect Wiz GraphQL Schema
+    runs-on:
+      group: "k8s-default-runner"
+    defaults:
+      run:
+        working-directory: provider
 
-      # Wiz Commercial (per docs)
-      WIZ_TOKEN_URL: https://auth.app.wiz.io/oauth/token
-      WIZ_AUDIENCE: wiz-api
+    env:
+      WIZ_API_URL: ${{ inputs.wiz_api_url }}
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Load Wiz creds (same as Terraform workflow)
-        shell: bash
+      - name: Validate Wiz credentials
         run: |
-          set -euo pipefail
-          echo "WIZ_CLIENT_ID=${{ secrets.WIZ_CLIENT_ID }}" >> "$GITHUB_ENV"
-          echo "WIZ_CLIENT_SECRET=${{ secrets.WIZ_CLIENT_SECRET }}" >> "$GITHUB_ENV"
-
-      - name: Verify Wiz creds got injected (no secret output)
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${WIZ_CLIENT_ID:-}" ]; then
-            echo "WIZ_CLIENT_ID is empty"
+          [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
+            echo "[ERROR] WIZ_CLIENT_ID or WIZ_CLIENT_SECRET secret is missing"
             exit 1
-          fi
-          if [ -z "${WIZ_CLIENT_SECRET:-}" ]; then
-            echo "WIZ_CLIENT_SECRET is empty"
-            exit 1
-          fi
-          echo "Wiz creds are present (masked)"
+          }
+          echo "[INFO] Wiz credentials present (masked)"
 
-      # Optional but helpful: confirms token endpoint + creds work from runner without printing token
-      - name: Probe token endpoint (safe)
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Probing token endpoint: $WIZ_TOKEN_URL"
-          resp="$(curl -sS -i -X POST "$WIZ_TOKEN_URL" \
-            -H "accept: application/json" \
-            -H "content-type: application/x-www-form-urlencoded" \
-            --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "audience=$WIZ_AUDIENCE" \
-            --data-urlencode "client_id=${WIZ_CLIENT_ID}" \
-            --data-urlencode "client_secret=${WIZ_CLIENT_SECRET}" \
-            || true)"
-          echo "$resp" | sed -n '1,12p'
-          echo "--- body (last 5 lines) ---"
-          echo "$resp" | tail -n 5
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          python-version: "3.11"
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-      - name: Install Python deps (POC only)
+      - name: Download dependencies (multi-proxy fallback)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r wiz-test-project/scripts/python/requirements.txt
+          export GONOSUMDB='github.com/geico-private,dev.azure.com'
 
-      - name: Run Wiz GraphQL introspection (POC)
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all'
+          go mod download || echo "[WARN] Attempt 1 incomplete"
+
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/core-golang-all'
+          go mod download || echo "[WARN] Attempt 2 incomplete"
+
+          export GOPROXY='direct'
+          go mod download || echo "[WARN] Attempt 3 incomplete"
+
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all'
+          go mod download
+          echo "[INFO] Dependencies resolved"
+
+      - name: Build introspection tool
         run: |
-          python wiz-test-project/scripts/python/wiz_graphql_debug.py \
-            --out-dir wiz-test-project/wiz_debug_out
+          go build -o introspect ./tools/introspect/
+          echo "[INFO] Introspect tool built"
+
+      - name: Run introspection
+        run: |
+          ./introspect \
+            --api-url "$WIZ_API_URL" \
+            --out-dir ./tools/introspect/out
+
+      - name: List output files
+        if: always()
+        run: |
+          echo "[INFO] Introspection output:"
+          find ./tools/introspect/out -type f | sort || echo "No files produced"
 
       - name: Ensure artifact directory is non-empty
         if: always()
-        shell: bash
         run: |
-          mkdir -p wiz-test-project/wiz_debug_out
-          test -n "$(ls -A wiz-test-project/wiz_debug_out 2>/dev/null)" || echo "no files produced" > wiz-test-project/wiz_debug_out/_empty.txt
+          mkdir -p ./tools/introspect/out
+          test -n "$(ls -A ./tools/introspect/out 2>/dev/null)" || \
+            echo "no files produced" > ./tools/introspect/out/_empty.txt
 
-      - name: List debug output (pre-upload)
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "PWD=$(pwd)"
-          ls -la wiz-test-project || true
-          ls -la wiz-test-project/wiz_debug_out || true
-          find wiz-test-project/wiz_debug_out -maxdepth 2 -type f -print || true
-
-      - name: Upload debug artifacts
+      - name: Upload introspection artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wiz-graphql-debug
-          path: |
-            wiz-test-project/wiz_debug_out/**
-
+          name: wiz-introspection
+          path: provider/tools/introspect/out/**
+          retention-days: 30
