@@ -1,0 +1,109 @@
+name: Build Wiz Azure Provider
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/wiz-azure-provider
+    paths:
+      - "provider/**"
+      - ".github/workflows/build-wiz-provider.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "provider/**"
+
+env:
+  GO_VERSION: "1.22"
+  BINARY_NAME: "terraform-provider-wiz-azure"
+  # GEICO Artifactory Go proxy — routes module downloads through internal proxy.
+  # GONOSUMDB disables checksum validation for GEICO private domains
+  # (Artifactory does not support the Go checksum database protocol).
+  GOPROXY: https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all
+  GONOSUMDB: github.com/geico-private,dev.azure.com
+
+jobs:
+  # ============================================================
+  # Build and Test
+  # ============================================================
+  build-and-test:
+    name: Build and Test
+    runs-on:
+      group: "k8s-default-runner"
+    defaults:
+      run:
+        working-directory: provider
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # The Terraform Plugin Framework is a public module (github.com/hashicorp/*).
+      # GEICO's primary proxy may not have it cached, so we fall through multiple
+      # sources before verifying. Using || true so partial failures don't abort.
+      - name: Download dependencies (multi-proxy fallback)
+        run: |
+          echo "[INFO]: Attempting dependency download via mvp-billing-golang-all..."
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all'
+          export GONOSUMDB='github.com/geico-private,dev.azure.com'
+          go mod download || echo "[WARN]: Attempt 1 incomplete, trying next proxy..."
+
+          echo "[INFO]: Attempting dependency download via core-golang-all..."
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/core-golang-all'
+          go mod download || echo "[WARN]: Attempt 2 incomplete, trying direct..."
+
+          echo "[INFO]: Attempting direct download (public modules)..."
+          export GOPROXY='direct'
+          go mod download || echo "[WARN]: Attempt 3 incomplete"
+
+          echo "[INFO]: Final verification pass..."
+          export GOPROXY='https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all'
+          go mod download
+          echo "[INFO]: Dependency download complete"
+
+      - name: Verify dependencies
+        run: go mod verify
+        env:
+          GONOSUMDB: github.com/geico-private,dev.azure.com
+
+      - name: Format check
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "[ERROR]: The following files are not properly formatted:"
+            echo "$unformatted"
+            echo "[INFO]: Run 'go fmt ./...' to fix"
+            exit 1
+          fi
+          echo "[INFO]: Format check passed"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: |
+          echo "[INFO]: Building provider binary for linux/amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-s -w -X main.version=${{ github.sha }}" \
+            -o ${{ env.BINARY_NAME }} \
+            .
+          echo "[INFO]: Build complete"
+          ls -lh ${{ env.BINARY_NAME }}
+
+      - name: Run unit tests
+        run: go test -v -race ./...
+
+      - name: Upload provider binary artifact
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-linux-amd64
+          path: provider/${{ env.BINARY_NAME }}
+          retention-days: 7
