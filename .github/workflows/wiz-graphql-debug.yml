@@ -1,0 +1,104 @@
+name: Debug Wiz GraphQL (Introspect)
+
+on:
+  workflow_dispatch:
+    inputs:
+      wiz_api_url:
+        description: "Wiz GraphQL URL (from Wiz Profile > Tenant Info)"
+        required: true
+        default: "https://api.us9.app.wiz.io/graphql"
+
+jobs:
+  introspect:
+    runs-on: ubuntu-latest
+    env:
+      # Tenant/region-specific
+      WIZ_API_URL: ${{ inputs.wiz_api_url }}
+
+      # Wiz Commercial (per docs)
+      WIZ_TOKEN_URL: https://auth.app.wiz.io/oauth/token
+      WIZ_AUDIENCE: wiz-api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load Wiz creds (same as Terraform workflow)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "WIZ_CLIENT_ID=${{ secrets.WIZ_CLIENT_ID }}" >> "$GITHUB_ENV"
+          echo "WIZ_CLIENT_SECRET=${{ secrets.WIZ_CLIENT_SECRET }}" >> "$GITHUB_ENV"
+
+      - name: Verify Wiz creds got injected (no secret output)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${WIZ_CLIENT_ID:-}" ]; then
+            echo "WIZ_CLIENT_ID is empty"
+            exit 1
+          fi
+          if [ -z "${WIZ_CLIENT_SECRET:-}" ]; then
+            echo "WIZ_CLIENT_SECRET is empty"
+            exit 1
+          fi
+          echo "Wiz creds are present (masked)"
+
+      # Optional but helpful: confirms token endpoint + creds work from runner without printing token
+      - name: Probe token endpoint (safe)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Probing token endpoint: $WIZ_TOKEN_URL"
+          resp="$(curl -sS -i -X POST "$WIZ_TOKEN_URL" \
+            -H "accept: application/json" \
+            -H "content-type: application/x-www-form-urlencoded" \
+            --data-urlencode "grant_type=client_credentials" \
+            --data-urlencode "audience=$WIZ_AUDIENCE" \
+            --data-urlencode "client_id=${WIZ_CLIENT_ID}" \
+            --data-urlencode "client_secret=${WIZ_CLIENT_SECRET}" \
+            || true)"
+          echo "$resp" | sed -n '1,12p'
+          echo "--- body (last 5 lines) ---"
+          echo "$resp" | tail -n 5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps (POC only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r wiz-test-project/scripts/python/requirements.txt
+
+      - name: Run Wiz GraphQL introspection (POC)
+        run: |
+          python wiz-test-project/scripts/python/wiz_graphql_debug.py \
+            --out-dir wiz-test-project/wiz_debug_out
+
+      - name: Ensure artifact directory is non-empty
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p wiz-test-project/wiz_debug_out
+          test -n "$(ls -A wiz-test-project/wiz_debug_out 2>/dev/null)" || echo "no files produced" > wiz-test-project/wiz_debug_out/_empty.txt
+
+      - name: List debug output (pre-upload)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PWD=$(pwd)"
+          ls -la wiz-test-project || true
+          ls -la wiz-test-project/wiz_debug_out || true
+          find wiz-test-project/wiz_debug_out -maxdepth 2 -type f -print || true
+
+      - name: Upload debug artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiz-graphql-debug
+          path: |
+            wiz-test-project/wiz_debug_out/**
+
