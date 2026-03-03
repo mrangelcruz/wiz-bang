@@ -1,4 +1,4 @@
-module github.com/mrangelcruz/terraform-provider-wiz-azure
+module github.com/geico-private/wiz/provider
 
 go 1.21
 

@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
-	"github.com/mrangelcruz/terraform-provider-wiz-azure/internal/provider"
+	"github.com/geico-private/wiz/provider/internal/provider"
 )
 
 // version is set at build time via -ldflags.
