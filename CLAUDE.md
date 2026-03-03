@@ -8,54 +8,79 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
 
 ## Project Goals
 
-1. **Task 1: Build a Wiz Azure Terraform provider**
-   - Wiz publishes an official AWS provider (`tf.app.wiz.io/wizsec/wiz`) but has no Azure equivalent
-   - We are reverse-engineering the Wiz GraphQL API to understand the Azure connector schema, then will build a custom Terraform provider
+1. **Task A: Build a Wiz Azure Terraform provider (Go)**
+   - Wiz publishes an official AWS/GCP provider but has no Azure equivalent
+   - Building a custom Go Terraform provider wrapping the Wiz GraphQL API
+   - Provider lives in `provider/` on `feature/wiz-azure-provider`
 
-2. **Task 2: Import an existing Wiz project into Terraform**
-   - Use `terraform import` to bring the existing `GEICO Cyber Prod` Wiz project under IaC management
-   - Scaffold exists in `wiz-test-project/`
+2. **Task B: Import an existing Wiz project into Terraform**
+   - Use `terraform import` to bring `GEICO Cyber Prod` under IaC management
+   - Scaffold lives in `wiz-test-project/` on `feature/wiz-test-project`
+
+---
+
+## Branch Strategy
+
+```
+main                            ← clean baseline
+├── feature/wiz-azure-provider  ← Task A (nighttime work)
+└── feature/wiz-test-project    ← Task B (daytime work)
+```
+
+Both branches pushed to `origin/mrangelcruz/wiz-bang`.
+Work repo: `github.com/geico-private/wiz`
 
 ---
 
 ## Current State
 
-### Task 1 — Azure provider: introspection phase
+### Task A — Go Provider (`feature/wiz-azure-provider`)
 
-- `wiz-test-project/scripts/python/wiz_graphql_debug.py` deep-introspects `CreateConnectorInput` and `UpdateConnectorInput` via BFS, writing each type to `wiz-test-project/build_artifacts/wiz_type_<TypeName>.json` and a combined rollup to `wiz_types_combined.json`
-- `.github/workflows/deploy-wiz-project.yml` has a `wiz-introspect` job that runs the script and uploads `build_artifacts/` as the `wiz-introspection` artifact
+**What exists:**
+- `provider/internal/client/auth.go` — OAuth2 token manager (functional)
+- `provider/internal/client/client.go` — GraphQL HTTP client (functional)
+- `provider/internal/client/mutations.go` — stubs (needs introspection output)
+- `provider/internal/provider/provider.go` — provider schema + auth wiring
+- `provider/internal/resources/azure_connector/resource.go` — CRUD stubs
+- `provider/tools/introspect/main.go` — Go BFS introspection tool
+- `provider/dev/` — local test Terraform config for dev_overrides
+- `.github/workflows/build-wiz-provider.yml` — CI build on GEICO runner
+- `.github/workflows/wiz-graphql-debug.yml` — runs introspection tool, uploads artifacts
 
-**Artifacts not yet generated** — workflow has not been run since the introspection changes. `build_artifacts/` only has outputs from prior run:
-- `wiz_introspection_mutations.json`
-- `wiz_mutations_filtered.txt`
-- `wiz_typename.json`
+**Go module path:** `github.com/geico-private/wiz/provider`
+**Provider address:** `local/geico/wiz-azure`
+**GEICO runner:** `group: "k8s-default-runner"`
+**GOPROXY:** `https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all`
 
-**Next step:** Run the workflow to generate `wiz_types_combined.json` — the blueprint for the Terraform resource schema.
+**Introspection status:**
+- `documents/wiz_introspection_mutations.json` — mutations list only (confirms createConnector/updateConnector/deleteConnector exist)
+- `wiz_types_combined.json` — NOT YET GENERATED (needs Go tool run with real Wiz creds)
+- Python script (`wiz_graphql_debug.py`) is abandoned — Go tool replaces it entirely
+
+**Next steps (Task A):**
+1. Copy `provider/` to work repo (`github.com/geico-private/wiz`)
+2. Trigger `wiz-graphql-debug.yml` on work repo with real Wiz creds → download `wiz-introspection` artifact
+3. Use `wiz_types_combined.json` to fill in `mutations.go` and `resource.go`
+4. Wire `azure_connector.NewResource` into `provider.go` Resources()
+5. Test via `build-wiz-provider.yml` workflow
+
+**No local Wiz creds** — all real API interaction must go through GitHub Actions on work repo.
 
 ---
 
-### Task 2 — Terraform import of GEICO Cyber Prod
+### Task B — Terraform Import (`feature/wiz-test-project`)
 
 **Completed:**
-- Target project identified: `GEICO Cyber Prod` (UUID: `41554e20-68eb-5986-a86e-d27233e3c752`)
-- Project located under: Settings → Projects → GEICO → GEICO Cyber Prod (folder) → GEICO Cyber Prod
-- Known config from Wiz Dashboard:
-  - Category: `Environment`, Parent folder: `GEICO Cyber`, Business Impact: `MBI`
-  - 11 linked cloud accounts (AWS, Azure, GCP) — Wiz-internal UUIDs not yet known
-- `wiz-test-project/tfvars/prod.tfvars.example` created with `project_name = "GEICO Cyber Prod"`
-- Wiz provider reference docs added to `wiz-test-project/documents/`
-- All committed and pushed to `main`
+- Target project: `GEICO Cyber Prod` (UUID: `41554e20-68eb-5986-a86e-d27233e3c752`)
+- `wiz-test-project/tfvars/prod.tfvars.example` created
+- `terraform/environments/PD/` — production Wiz IaC (SSO, AWS/GCP connectors, Slack, ADO)
+- All committed to `feature/wiz-test-project`
 
 **`terraform import` has NOT been run yet.**
 
-**Next steps (in order):**
-
-1. **Add `WIZ_API_URL` GitHub secret** (if not already done):
-   - Repo → Settings → Secrets and variables → Actions → New repository secret
-   - Name: `WIZ_API_URL`, Value: `https://api.us9.app.wiz.io/graphql`
-   - Workflow already references it on line 43 — no workflow changes needed
-
-2. **Run `terraform import` locally** (one-time, not in CI):
+**Next steps (Task B):**
+1. Get Wiz service account creds (ask tenant admin — can't create own, insufficient permissions)
+2. Run `terraform import` locally on MacBook (work repo):
    ```bash
    cd wiz-test-project
    export WIZ_CLIENT_ID=...
@@ -67,17 +92,8 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
      wiz_project.this \
      41554e20-68eb-5986-a86e-d27233e3c752
    ```
-
-3. **Dump full state** to get all Wiz-internal UUIDs:
-   ```bash
-   terraform show -json | python3 -m json.tool > imported_state.json
-   ```
-
-4. **Expand `main.tf`** using `imported_state.json` as source of truth (risk_profile, cloud_account_links, parent_project_id, etc.)
-
-5. **Run `terraform plan`** until no changes — IaC mirrors live project
-
-6. **Add remote state backend** (S3, Azure Blob, or Terraform Cloud) — no backend configured yet; required for CI plan/apply to work long-term
+3. `terraform show -json > imported_state.json` → expand `main.tf`
+4. `terraform plan` until zero changes
 
 ---
 
@@ -85,35 +101,37 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
 
 | Path | Purpose |
 |------|---------|
-| `wiz-test-project/scripts/python/wiz_graphql_debug.py` | GraphQL introspection script |
-| `wiz-test-project/scripts/python/requirements.txt` | Python deps: `requests`, `python-dotenv` |
-| `wiz-test-project/build_artifacts/` | Script output — JSON introspection data |
-| `wiz-test-project/main.tf` | `wiz_project.this` resource (minimal — needs expansion post-import) |
-| `wiz-test-project/versions.tf` | Requires `tf.app.wiz.io/wizsec/wiz` provider |
-| `wiz-test-project/provider.tf` | Provider config (auth via env vars) |
+| `provider/tools/introspect/main.go` | Go BFS introspection tool — queries Wiz GraphQL schema |
+| `provider/internal/client/` | Wiz OAuth2 + GraphQL client (reused by all provider code) |
+| `provider/internal/resources/azure_connector/resource.go` | CRUD stubs — fill from introspection output |
+| `provider/dev/` | Local test Terraform config (dev_overrides) |
+| `provider/GNUmakefile` | `make build`, `make install`, `make test` |
+| `.github/workflows/build-wiz-provider.yml` | CI: build + unit test Go provider |
+| `.github/workflows/wiz-graphql-debug.yml` | CI: run introspection tool, upload wiz-introspection artifact |
+| `documents/wiz_introspection_mutations.json` | First introspection run — mutations list only |
+| `documents/project_details.md` | Full repo architecture reference |
+| `documents/go_application_workflows.md` | GEICO GitHub Actions patterns for Go (proxy config, runner) |
+| `wiz-test-project/main.tf` | `wiz_project.this` resource (minimal — expand post-import) |
 | `wiz-test-project/tfvars/prod.tfvars.example` | Prod var values for GEICO Cyber Prod import |
-| `wiz-test-project/documents/` | Wiz provider + wiz_project schema reference docs |
-| `.github/workflows/deploy-wiz-project.yml` | CI: introspect → plan → apply |
+| `terraform/environments/PD/` | Production Wiz IaC — SSO, AWS/GCP connectors, integrations |
 
 ## Key Facts & Conventions
 
 - **Target project UUID:** `41554e20-68eb-5986-a86e-d27233e3c752`
-- **tfvars convention:** `.tfvars.example` extension only — `.tfvars` not allowed by CI runner
-- **No `.gitignore`** in this repo
-- **Workflow not on default branch at work** — trigger via:
+- **tfvars convention:** `.tfvars.example` extension only
+- **Work repo:** `github.com/geico-private/wiz` (MacBook)
+- **Sandbox repo:** `github.com/mrangelcruz/wiz-bang` (Ubuntu laptop)
+- **No local Wiz creds** — cannot create service account (insufficient permissions)
+- **Trigger workflows via:**
   ```bash
-  gh workflow run deploy-wiz-project.yml --ref <your-feature-branch> -f env=prod
+  gh workflow run <workflow>.yml --ref feature/wiz-azure-provider
   gh run watch
+  gh run download --name wiz-introspection --dir ./artifacts/
   ```
+- **`import.sh` bug:** targets `environments/prod/` but directory is `environments/PD/`
 
-## Required Secrets (GitHub + local env)
+## Required Secrets
 
 - `WIZ_CLIENT_ID`
 - `WIZ_CLIENT_SECRET`
-- `WIZ_API_URL` = `https://api.us9.app.wiz.io/graphql` (confirmed via browser Network tab)
-
-## GraphQL Mutations of Interest
-
-- `createConnector` → `CreateConnectorInput`
-- `updateConnector` → `UpdateConnectorInput`
-- `deleteConnector` → `DeleteConnectorInput`
+- `WIZ_API_URL` = `https://api.us9.app.wiz.io/graphql`
