@@ -36,8 +36,8 @@ jobs:
       - name: Terraform Init
         working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
         run: terraform init -upgrade
 
       - name: Terraform Format Check
@@ -51,11 +51,11 @@ jobs:
       - name: Terraform Plan
         working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
+          TF_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
         run: |
-          ENV=${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
-          terraform plan -var-file="tfvars/${ENV}.tfvars.example" -out=tfplan
+          terraform plan -var-file="tfvars/${TF_ENV}.tfvars.example" -out=tfplan
 
       - name: Upload plan artifact
         if: github.event_name == 'workflow_dispatch'
@@ -86,13 +86,13 @@ jobs:
       - name: Terraform Init
         working-directory: wiz-projects/environments/${{ inputs.env }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
         run: terraform init -upgrade
 
       - name: Terraform Apply
         working-directory: wiz-projects/environments/${{ inputs.env }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
         run: terraform apply -auto-approve tfplan

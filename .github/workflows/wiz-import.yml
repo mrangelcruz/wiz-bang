@@ -30,15 +30,15 @@ jobs:
       - name: Terraform Init
         working-directory: wiz-projects/environments/${{ inputs.environment }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
         run: terraform init -upgrade
 
       - name: Terraform Import
         working-directory: wiz-projects/environments/${{ inputs.environment }}
         env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+          WIZ_CLIENT_ID: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+          WIZ_CLIENT_SECRET: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
         run: |
           terraform import \
             -var-file="tfvars/${{ inputs.environment }}.tfvars.example" \
