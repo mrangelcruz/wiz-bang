@@ -141,8 +141,8 @@ wiz-projects/
 ## Work Repo Secrets (geico-private/wiz)
 
 Secrets stored as GitHub Environment secrets under the "PD" environment:
-- `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD` — used by both workflows
-- Generic `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` exist at repo level but not used
+- `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` — repo-level secrets, used by both workflows
+- `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD` — exist but NOT used (bad/unconfigured)
 - `WIZ_CLIENT_ID_DV` / `WIZ_CLIENT_SECRET_DV` — exist but not properly configured; DV removed
 - `WIZ_API_URL` secret exists (not used in our provider.tf — provider resolves endpoint from creds)
 - Wiz provider env vars: `WIZ_CLIENT_ID` + `WIZ_CLIENT_SECRET` (confirmed from provider docs)

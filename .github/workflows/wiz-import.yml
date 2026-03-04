@@ -20,8 +20,8 @@ jobs:
     timeout-minutes: 30
     env:
       TF_DIR: wiz-projects/environments/PD
-      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID_PD }}
-      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET_PD }}
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
       PROJECT_UUID: ${{ inputs.project_uuid }}
 
     steps:
@@ -32,7 +32,7 @@ jobs:
         run: |
           echo "[INFO]: Validating required secrets for environment 'PD'..."
           [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
-            echo "[ERROR]: Missing secrets for environment 'PD' - check WIZ_CLIENT_ID_PD / WIZ_CLIENT_SECRET_PD secrets"
+            echo "[ERROR]: Missing secrets for environment 'PD' - check WIZ_CLIENT_ID / WIZ_CLIENT_SECRET repo secrets"
             exit 1
           }
           echo "[INFO]: All secrets validated ✓"
