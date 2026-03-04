@@ -90,7 +90,9 @@ wiz-projects/
   - Single job, `environment: PD`
   - `action` input (plan/apply), `confirm_critical_op` gate, `-detailed-exitcode`, Plan Summary
   - Credentials: `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` (repo-level secrets)
-- PR open on work repo (`geico-private/wiz`) — awaiting approval
+  - `pull_request` trigger removed (was causing secret-access issues)
+  - `actions: write` permission removed — `contents: read` only (least privilege)
+- PR broadcast for approval on work repo (`geico-private/wiz`) — all Copilot review items resolved
   - Plan passes with correct repo-level secrets
 - macOS case-rename gotcha: use two-step `git mv dv dv_tmp && git mv dv_tmp DV` for case-only renames
 
