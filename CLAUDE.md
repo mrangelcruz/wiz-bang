@@ -87,17 +87,18 @@ wiz-projects/
 - `wiz-projects/environments/PD/` — stub only, needs expansion post-import
 - `.github/workflows/wiz-import.yml` — PD only, runs `terraform import` + uploads artifact
 - `.github/workflows/deploy-wiz-project.yml` — PD only, aligned with deploy-wiz-tf.yml patterns
-  - Single job, `environment: PD` (accesses PD GitHub Environment secrets)
+  - Single job, `environment: PD`
   - `action` input (plan/apply), `confirm_critical_op` gate, `-detailed-exitcode`, Plan Summary
-  - Credentials: `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD`
-- PR open on work repo (`geico-private/wiz`) — multiple Copilot review rounds addressed
+  - Credentials: `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` (repo-level secrets)
+- PR open on work repo (`geico-private/wiz`) — awaiting approval
+  - Plan passes with correct repo-level secrets
 - macOS case-rename gotcha: use two-step `git mv dv dv_tmp && git mv dv_tmp DV` for case-only renames
 
 **`terraform import` has NOT been run yet.**
 
 **Next steps (Task B):**
-1. Verify PR plan passes with PD credentials
-2. Trigger import workflow (workflow_dispatch, no inputs needed beyond UUID default):
+1. Wait for PR approval on `geico-private/wiz`
+2. After merge, trigger import workflow (workflow_dispatch, no inputs needed beyond UUID default):
    ```bash
    gh workflow run "Wiz Project Import" --ref wiz-test-project
    gh run watch
