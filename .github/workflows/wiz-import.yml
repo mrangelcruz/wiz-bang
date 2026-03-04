@@ -1,5 +1,5 @@
 name: Wiz Project Import
-run-name: Wiz Project import into ${{ github.event.inputs.environment }} by @${{ github.actor }}
+run-name: Wiz Project import into PD by @${{ github.actor }}
 
 permissions:
   contents: read
@@ -8,12 +8,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Environment to import into"
-        required: true
-        default: PD
-        type: choice
-        options: [DV, PD]
       project_uuid:
         description: "Wiz Project UUID to import"
         required: true
@@ -22,12 +16,12 @@ on:
 jobs:
   import:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: PD
     timeout-minutes: 30
     env:
-      TF_DIR: wiz-projects/environments/${{ inputs.environment }}
-      WIZ_CLIENT_ID: ${{ inputs.environment == 'PD' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-      WIZ_CLIENT_SECRET: ${{ inputs.environment == 'PD' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
+      TF_DIR: wiz-projects/environments/PD
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID_PD }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET_PD }}
       PROJECT_UUID: ${{ inputs.project_uuid }}
 
     steps:
@@ -36,9 +30,9 @@ jobs:
 
       - name: Validate Secrets
         run: |
-          echo "[INFO]: Validating required secrets for environment '${{ inputs.environment }}'..."
+          echo "[INFO]: Validating required secrets for environment 'PD'..."
           [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
-            echo "[ERROR]: Missing secrets for environment '${{ inputs.environment }}' - check WIZ_CLIENT_ID_${{ inputs.environment }} secrets"
+            echo "[ERROR]: Missing secrets for environment 'PD' - check WIZ_CLIENT_ID_PD / WIZ_CLIENT_SECRET_PD secrets"
             exit 1
           }
           echo "[INFO]: All secrets validated ✓"
@@ -60,7 +54,7 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: |
           terraform import \
-            -var-file="tfvars/${{ inputs.environment }}.tfvars.example" \
+            -var-file="tfvars/PD.tfvars.example" \
             wiz_project.this \
             "$PROJECT_UUID"
 
@@ -71,5 +65,5 @@ jobs:
       - name: Upload imported state artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wiz-imported-state-${{ inputs.environment }}
+          name: wiz-imported-state-PD
           path: ${{ env.TF_DIR }}/imported_state.json

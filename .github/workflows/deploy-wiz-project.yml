@@ -1,5 +1,5 @@
 name: "deploy-wiz-project"
-run-name: Wiz Project `terraform ${{ github.event.inputs.action }} in ${{ github.event.inputs.env }}` by @${{ github.actor }}
+run-name: Wiz Project `terraform ${{ github.event.inputs.action }} in PD` by @${{ github.actor }}
 
 permissions:
   contents: read
@@ -16,14 +16,6 @@ on:
         options:
           - plan
           - apply
-      env:
-        description: 'Target environment'
-        required: true
-        default: 'DV'
-        type: choice
-        options:
-          - DV
-          - PD
       confirm_critical_op:
         description: "Type action name to confirm (apply only)"
         required: false
@@ -41,20 +33,20 @@ on:
       - ".github/workflows/deploy-wiz-project.yml"
 
 env:
-  TF_DIR: wiz-projects/environments/${{ github.event.inputs.env || 'DV' }}
+  TF_DIR: wiz-projects/environments/PD
 
 concurrency:
-  group: wiz-project-${{ github.event.inputs.env || 'DV' }}
+  group: wiz-project-PD
   cancel-in-progress: false
 
 jobs:
   wiz-project-terraform:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.env || 'DV' }}
+    environment: PD
     timeout-minutes: 30
     env:
-      WIZ_CLIENT_ID: ${{ github.event.inputs.env == 'PD' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-      WIZ_CLIENT_SECRET: ${{ github.event.inputs.env == 'PD' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID_PD }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET_PD }}
 
     steps:
       - name: Checkout
@@ -62,9 +54,9 @@ jobs:
 
       - name: Validate Secrets
         run: |
-          echo "[INFO]: Validating required secrets for environment '${{ github.event.inputs.env || 'DV' }}'..."
+          echo "[INFO]: Validating required secrets for environment 'PD'..."
           [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
-            echo "[ERROR]: Missing secrets for environment '${{ github.event.inputs.env || 'DV' }}' - check WIZ_CLIENT_ID_${{ github.event.inputs.env || 'DV' }} secrets"
+            echo "[ERROR]: Missing secrets for environment 'PD' - check WIZ_CLIENT_ID_PD / WIZ_CLIENT_SECRET_PD secrets"
             exit 1
           }
           echo "[INFO]: All secrets validated ✓"
@@ -113,7 +105,7 @@ jobs:
         run: |
           echo "[INFO]: Creating Terraform plan..."
           terraform plan -no-color -detailed-exitcode \
-            -var-file="tfvars/${{ github.event.inputs.env || 'DV' }}.tfvars.example" \
+            -var-file="tfvars/PD.tfvars.example" \
             -out=tfplan
           echo "[INFO]: Terraform plan created"
 

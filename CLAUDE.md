@@ -71,40 +71,39 @@ Work repo: `github.com/geico-private/wiz`
 ```
 wiz-projects/
 ├── environments/
-│   ├── dv/          ← proc-test-project-dv (working, created by deploy workflow)
-│   └── pd/          ← GEICO AWS stub (fill after import artifact)
+│   └── PD/          ← GEICO AWS stub (fill after import artifact)
 ├── modules/
 │   └── wiz-project/ ← reusable module stub
 └── documents/       ← Wiz provider + wiz_project schema docs
 ```
+
+**Note:** DV environment removed — team goes straight to PD. DV secrets not properly configured in work repo.
 
 **Target project:** `GEICO AWS`
 **UUID:** `b044c7e1-bae8-5365-aa29-42a1a193dc1f`
 **Wiz Dashboard path:** GEICO (folder) → GEICO AWS (project)
 
 **What's done:**
-- `wiz-projects/environments/dv/` — fully functional, manages `proc-test-project-dv`
-- `wiz-projects/environments/pd/` — stub only, needs expansion post-import
-- `.github/workflows/wiz-import.yml` — env-specific secrets, runs `terraform import` + uploads artifact
-- `.github/workflows/deploy-wiz-project.yml` — env-specific secrets, plan + apply for dv/pd
-- `provider/` folder deleted from this branch (compiled binary only, Task A lives on `feature/wiz-azure-provider`)
-- `wiz-graphql-debug.yml` removed from this branch (Task A only)
-- PR open on work repo (`geico-private/wiz`) — Copilot/Semgrep review items addressed
+- `wiz-projects/environments/PD/` — stub only, needs expansion post-import
+- `.github/workflows/wiz-import.yml` — PD only, runs `terraform import` + uploads artifact
+- `.github/workflows/deploy-wiz-project.yml` — PD only, aligned with deploy-wiz-tf.yml patterns
+  - Single job, `environment: PD` (accesses PD GitHub Environment secrets)
+  - `action` input (plan/apply), `confirm_critical_op` gate, `-detailed-exitcode`, Plan Summary
+  - Credentials: `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD`
+- PR open on work repo (`geico-private/wiz`) — multiple Copilot review rounds addressed
+- macOS case-rename gotcha: use two-step `git mv dv dv_tmp && git mv dv_tmp DV` for case-only renames
 
 **`terraform import` has NOT been run yet.**
 
 **Next steps (Task B):**
-1. PR merged on work repo (or close + recreate clean)
-2. Trigger import workflow:
+1. Verify PR plan passes with PD credentials
+2. Trigger import workflow (workflow_dispatch, no inputs needed beyond UUID default):
    ```bash
-   gh workflow run "Wiz Project Import" \
-     --ref wiz-test-project \
-     -f environment=pd \
-     -f project_uuid=b044c7e1-bae8-5365-aa29-42a1a193dc1f
+   gh workflow run "Wiz Project Import" --ref wiz-test-project
    gh run watch
-   gh run download --name wiz-imported-state-pd --dir ./artifacts/
+   gh run download --name wiz-imported-state-PD --dir ./artifacts/
    ```
-3. Use `imported_state.json` artifact to expand `pd/main.tf` with full attribute set
+3. Use `imported_state.json` artifact to expand `PD/main.tf` with full attribute set
 4. `terraform plan` until zero changes
 5. Add remote state backend (Azure Blob or HCP Terraform) — none configured yet
 
@@ -114,16 +113,14 @@ wiz-projects/
 
 | Path | Purpose |
 |------|---------|
-| `wiz-projects/environments/dv/` | DV Terraform root — proc-test-project-dv |
-| `wiz-projects/environments/pd/` | PD Terraform root — GEICO AWS (stub, post-import) |
-| `wiz-projects/environments/pd/tfvars/pd.tfvars.example` | `project_name = "GEICO AWS"` |
+| `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (stub, post-import) |
+| `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "GEICO AWS"` |
 | `wiz-projects/modules/wiz-project/` | Reusable wiz_project module stub |
 | `wiz-projects/documents/` | Wiz provider + wiz_project schema reference docs |
-| `.github/workflows/wiz-import.yml` | Runs terraform import, uploads state JSON artifact |
-| `.github/workflows/deploy-wiz-project.yml` | Plan + apply for dv/pd environments |
+| `.github/workflows/wiz-import.yml` | Runs terraform import for PD, uploads state JSON artifact |
+| `.github/workflows/deploy-wiz-project.yml` | Plan + apply for PD environment |
 | `provider/tools/introspect/main.go` | Go BFS introspection tool (Task A) |
 | `provider/internal/client/` | Wiz OAuth2 + GraphQL client (Task A) |
-| `tmp/copilot_review_results.md` | PR review resolution summary (not committed) |
 
 ## Key Facts & Conventions
 
@@ -134,16 +131,18 @@ wiz-projects/
 - **import runs in CI** (wiz-import.yml), not locally — state captured as artifact
 - **Trigger workflows by NAME not file path:**
   ```bash
-  gh workflow run "Wiz Project Import" --ref wiz-test-project -f environment=pd
+  gh workflow run "Wiz Project Import" --ref wiz-test-project
   gh run watch
-  gh run download --name wiz-imported-state-pd --dir ./artifacts/
+  gh run download --name wiz-imported-state-PD --dir ./artifacts/
   ```
 - **`gh workflow run` with file path fails** if workflow not on default branch — use the `name:` field value instead
+- **macOS case-rename bug:** `git mv dv DV` silently does nothing on macOS (case-insensitive FS). Use two-step: `git mv dv dv_tmp && git mv dv_tmp DV`
 
 ## Work Repo Secrets (geico-private/wiz)
 
-Environment-specific secrets exist and are used in both workflows:
-- `WIZ_CLIENT_ID_DV` / `WIZ_CLIENT_SECRET_DV`
-- `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD`
-- Generic `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` also exist but not used (env-specific preferred)
+Secrets stored as GitHub Environment secrets under the "PD" environment:
+- `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD` — used by both workflows
+- Generic `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` exist at repo level but not used
+- `WIZ_CLIENT_ID_DV` / `WIZ_CLIENT_SECRET_DV` — exist but not properly configured; DV removed
 - `WIZ_API_URL` secret exists (not used in our provider.tf — provider resolves endpoint from creds)
+- Wiz provider env vars: `WIZ_CLIENT_ID` + `WIZ_CLIENT_SECRET` (confirmed from provider docs)
