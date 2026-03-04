@@ -14,8 +14,8 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
    - Provider lives in `provider/` on `feature/wiz-azure-provider`
 
 2. **Task B: Import an existing Wiz project into Terraform**
-   - Use `terraform import` to bring `GEICO Cyber Prod` under IaC management
-   - Scaffold lives in `wiz-test-project/` on `feature/wiz-test-project`
+   - Use `terraform import` (via CI) to bring `GEICO AWS` under IaC management
+   - Terraform code lives in `wiz-projects/` on `feature/wiz-test-project`
 
 ---
 
@@ -23,8 +23,8 @@ Say **"end session"** → Claude updates `CLAUDE.md` + `MEMORY.md`, then git add
 
 ```
 main                            ← clean baseline
-├── feature/wiz-azure-provider  ← Task A (nighttime work)
-└── feature/wiz-test-project    ← Task B (daytime work)
+├── feature/wiz-azure-provider  ← Task A (Go provider)
+└── feature/wiz-test-project    ← Task B (Wiz project IaC)
 ```
 
 Both branches pushed to `origin/mrangelcruz/wiz-bang`.
@@ -46,59 +46,72 @@ Work repo: `github.com/geico-private/wiz`
 - `provider/dev/` — local test Terraform config for dev_overrides
 - `.github/workflows/build-wiz-provider.yml` — CI build on GEICO runner
 - `.github/workflows/wiz-graphql-debug.yml` — runs introspection tool, uploads artifacts
+- `.github/workflows/wiz-import.yml` — **TEMPORARILY REPURPOSED** to run introspection (see below)
 
 **Go module path:** `github.com/geico-private/wiz/provider`
 **Provider address:** `local/geico/wiz-azure`
 **GEICO runner:** `group: "k8s-default-runner"`
 **GOPROXY:** `https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all`
 
+**Introspection workflow strategy:**
+- GitHub Actions only recognizes `workflow_dispatch` workflows on the **default branch** (main)
+- Workaround: repurpose `wiz-import.yml` (exists on main) on `wiz-azure-provider` branch
+- GitHub runs the **branch's version** of the file when triggered via UI branch selector or `--ref`
+- `wiz-import.yml` on this branch runs Go introspection tool instead of Terraform import
+- To restore: replace contents with original Terraform import logic once provider PR is formalized
+- Trigger: Actions UI → "Wiz Project Import" → Run workflow → branch: `wiz-azure-provider`
+
 **Introspection status:**
 - `documents/wiz_introspection_mutations.json` — mutations list only (confirms createConnector/updateConnector/deleteConnector exist)
-- `wiz_types_combined.json` — NOT YET GENERATED (needs Go tool run with real Wiz creds)
-- Python script (`wiz_graphql_debug.py`) is abandoned — Go tool replaces it entirely
-- `provider/tools/introspect/main.go` updated this session — BFS now covers read-side types:
-  - Added `fields` + `possibleTypes` to introspection query
-  - Added `Fields` + `PossibleTypes` to `WizType` struct
-  - Added `"Connector"` seed so BFS reaches `ConnectorConfigAzure` via UNION/INTERFACE possibleTypes
-- `documents/queeno_wiz_provider_analysis.md` — new: queeno/wiz provider analysis (design justification doc)
+- `wiz_types_combined.json` — NOT YET GENERATED (needs workflow run with real Wiz creds)
 
 **Next steps (Task A):**
-1. PR in progress on work repo to add `wiz-graphql-debug.yml` + full `provider/` folder
-2. Trigger `wiz-graphql-debug.yml` on work repo with real Wiz creds → download `wiz-introspection` artifact
-3. Use `wiz_types_combined.json` → `ConnectorConfigAzure` entry to fill in `mutations.go` and `resource.go`
-4. Wire `azure_connector.NewResource` into `provider.go` Resources()
-5. Test via `build-wiz-provider.yml` workflow
+1. On work repo (`geico-private/wiz`): create branch `wiz-azure-provider` from main
+2. Copy `provider/` folder + `.github/workflows/wiz-import.yml` from sandbox to work repo branch
+3. Push `wiz-azure-provider` to work repo
+4. Trigger via Actions UI: "Wiz Project Import" → branch `wiz-azure-provider` → Run workflow
+5. Download `wiz-introspection` artifact
+6. Use `wiz_types_combined.json` → `ConnectorConfigAzure` entry to fill in `mutations.go` and `resource.go`
+7. Wire `azure_connector.NewResource` into `provider.go` Resources()
+8. Test via `build-wiz-provider.yml` workflow
+9. Formalize with a proper PR + dedicated workflow file; restore `wiz-import.yml` to original
 
 **No local Wiz creds** — all real API interaction must go through GitHub Actions on work repo.
 
 ---
 
-### Task B — Terraform Import (`feature/wiz-test-project`)
+### Task B — Wiz Project IaC (`feature/wiz-test-project`)
 
-**Completed:**
-- Target project: `GEICO Cyber Prod` (UUID: `41554e20-68eb-5986-a86e-d27233e3c752`)
-- `wiz-test-project/tfvars/prod.tfvars.example` created
-- `terraform/environments/PD/` — production Wiz IaC (SSO, AWS/GCP connectors, Slack, ADO)
-- All committed to `feature/wiz-test-project`
+**Folder structure:**
+```
+wiz-projects/
+├── environments/
+│   └── PD/          ← GEICO AWS stub (fill after import artifact)
+├── modules/
+│   └── wiz-project/ ← reusable module stub
+└── documents/       ← Wiz provider + wiz_project schema docs
+```
+
+**Target project:** `GEICO AWS`
+**UUID:** `b044c7e1-bae8-5365-aa29-42a1a193dc1f`
+**Wiz Dashboard path:** GEICO (folder) → GEICO AWS (project)
+
+**What's done:**
+- PR merged to `main` on work repo (`geico-private/wiz`)
+- `wiz-projects/environments/PD/` — stub only, needs expansion post-import
+- `.github/workflows/wiz-import.yml` — on main, runs terraform import for PD, uploads state JSON artifact
+- `.github/workflows/deploy-wiz-project.yml` — on main, plan + apply for PD
 
 **`terraform import` has NOT been run yet.**
 
 **Next steps (Task B):**
-1. Get Wiz service account creds (ask tenant admin — can't create own, insufficient permissions)
-2. Run `terraform import` locally on MacBook (work repo):
-   ```bash
-   cd wiz-test-project
-   export WIZ_CLIENT_ID=...
-   export WIZ_CLIENT_SECRET=...
-   export WIZ_API_URL=https://api.us9.app.wiz.io/graphql
-   terraform init
-   terraform import \
-     -var-file=tfvars/prod.tfvars.example \
-     wiz_project.this \
-     41554e20-68eb-5986-a86e-d27233e3c752
-   ```
-3. `terraform show -json > imported_state.json` → expand `main.tf`
+1. On work repo: trigger import workflow from Actions UI:
+   - Actions → "Wiz Project Import" → Run workflow → branch: `main` (or `wiz-test-project` if still exists)
+   - Or: `gh workflow run "Wiz Project Import" --ref main`
+2. Download artifact: `gh run download --name wiz-imported-state-PD --dir ./artifacts/`
+3. Use `imported_state.json` to expand `PD/main.tf` with full attribute set
 4. `terraform plan` until zero changes
+5. Add remote state backend (Azure Blob or HCP Terraform) — none configured yet
 
 ---
 
@@ -106,38 +119,37 @@ Work repo: `github.com/geico-private/wiz`
 
 | Path | Purpose |
 |------|---------|
-| `provider/tools/introspect/main.go` | Go BFS introspection tool — queries Wiz GraphQL schema |
-| `provider/internal/client/` | Wiz OAuth2 + GraphQL client (reused by all provider code) |
-| `provider/internal/resources/azure_connector/resource.go` | CRUD stubs — fill from introspection output |
-| `provider/dev/` | Local test Terraform config (dev_overrides) |
-| `provider/GNUmakefile` | `make build`, `make install`, `make test` |
-| `.github/workflows/build-wiz-provider.yml` | CI: build + unit test Go provider |
-| `.github/workflows/wiz-graphql-debug.yml` | CI: run introspection tool, upload wiz-introspection artifact |
+| `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (stub, post-import) |
+| `wiz-projects/modules/wiz-project/` | Reusable wiz_project module stub |
+| `wiz-projects/documents/` | Wiz provider + wiz_project schema reference docs |
+| `.github/workflows/wiz-import.yml` | **On main**: Terraform import. **On wiz-azure-provider**: introspection tool (temp) |
+| `.github/workflows/deploy-wiz-project.yml` | Plan + apply for PD environment |
+| `provider/tools/introspect/main.go` | Go BFS introspection tool (Task A) |
+| `provider/internal/client/` | Wiz OAuth2 + GraphQL client (Task A) |
 | `documents/wiz_introspection_mutations.json` | First introspection run — mutations list only |
 | `documents/queeno_wiz_provider_analysis.md` | queeno/wiz provider analysis — design justification reference |
-| `documents/project_details.md` | Full repo architecture reference |
-| `documents/go_application_workflows.md` | GEICO GitHub Actions patterns for Go (proxy config, runner) |
-| `wiz-test-project/main.tf` | `wiz_project.this` resource (minimal — expand post-import) |
-| `wiz-test-project/tfvars/prod.tfvars.example` | Prod var values for GEICO Cyber Prod import |
-| `terraform/environments/PD/` | Production Wiz IaC — SSO, AWS/GCP connectors, integrations |
 
 ## Key Facts & Conventions
 
-- **Target project UUID:** `41554e20-68eb-5986-a86e-d27233e3c752`
+- **GEICO AWS UUID:** `b044c7e1-bae8-5365-aa29-42a1a193dc1f`
 - **tfvars convention:** `.tfvars.example` extension only
-- **Work repo:** `github.com/geico-private/wiz` (MacBook)
-- **Sandbox repo:** `github.com/mrangelcruz/wiz-bang` (Ubuntu laptop)
-- **No local Wiz creds** — cannot create service account (insufficient permissions)
-- **Trigger workflows via:**
+- **No `.gitignore`** in this repo
+- **No local Wiz creds** — all real API interaction via GitHub Actions on work repo
+- **GitHub Actions workflow_dispatch** only recognizes workflows on the default branch
+  - Workaround: repurpose an existing workflow file; GitHub runs the branch's version via UI/`--ref`
+- **Trigger workflows by NAME not file path:**
   ```bash
-  gh workflow run <workflow>.yml --ref feature/wiz-azure-provider
+  gh workflow run "Wiz Project Import" --ref <branch>
   gh run watch
   gh run download --name wiz-introspection --dir ./artifacts/
   ```
-- **`import.sh` bug:** targets `environments/prod/` but directory is `environments/PD/`
+- **`gh workflow run` with file path fails** if workflow not on default branch — use the `name:` field value instead
+- **macOS case-rename bug:** `git mv dv DV` silently does nothing on macOS (case-insensitive FS). Use two-step: `git mv dv dv_tmp && git mv dv_tmp DV`
 
-## Required Secrets
+## Work Repo Secrets (geico-private/wiz)
 
-- `WIZ_CLIENT_ID`
-- `WIZ_CLIENT_SECRET`
-- `WIZ_API_URL` = `https://api.us9.app.wiz.io/graphql`
+- `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` — repo-level secrets, used by both workflows
+- `WIZ_CLIENT_ID_PD` / `WIZ_CLIENT_SECRET_PD` — exist but NOT used (bad/unconfigured)
+- `WIZ_API_URL` secret exists (not used in our provider.tf — provider resolves endpoint from creds)
+- Wiz provider env vars: `WIZ_CLIENT_ID` + `WIZ_CLIENT_SECRET` (confirmed from provider docs)
+- **`environment: PD`** on job required to access repo-level secrets
