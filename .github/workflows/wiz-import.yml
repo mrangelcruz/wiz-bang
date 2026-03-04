@@ -1,0 +1,56 @@
+name: Wiz Project Import
+run-name: Wiz GraphQL Introspection by @${{ github.actor }}
+
+permissions:
+  contents: read
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_uuid:
+        description: "Unused (kept to preserve UI compatibility)"
+        required: false
+        default: "n/a"
+
+jobs:
+  import:
+    runs-on:
+      group: "k8s-default-runner"
+    environment: PD
+    timeout-minutes: 30
+    env:
+      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+      GOPROXY: "https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Secrets
+        run: |
+          [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
+            echo "[ERROR]: Missing WIZ_CLIENT_ID / WIZ_CLIENT_SECRET"
+            exit 1
+          }
+          echo "[INFO]: Secrets validated ✓"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: provider/go.mod
+          cache-dependency-path: provider/go.sum
+
+      - name: Run Introspection
+        working-directory: provider
+        run: |
+          go run ./tools/introspect \
+            --api-url https://api.us9.app.wiz.io/graphql \
+            --out-dir ./tools/introspect/out
+
+      - name: Upload Introspection Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiz-introspection
+          path: provider/tools/introspect/out/
