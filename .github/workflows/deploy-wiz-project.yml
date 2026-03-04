@@ -88,7 +88,7 @@ jobs:
         env:
           WIZ_CLIENT_ID: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
           WIZ_CLIENT_SECRET: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-        run: terraform init -upgrade
+        run: terraform init
 
       - name: Terraform Apply
         working-directory: wiz-projects/environments/${{ inputs.env }}
