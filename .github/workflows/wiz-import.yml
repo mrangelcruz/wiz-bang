@@ -1,4 +1,9 @@
 name: Wiz Project Import
+run-name: Wiz Project import into ${{ github.event.inputs.environment }} by @${{ github.actor }}
+
+permissions:
+  contents: read
+  actions: write
 
 on:
   workflow_dispatch:
@@ -6,9 +11,9 @@ on:
       environment:
         description: "Environment to import into"
         required: true
-        default: pd
+        default: PD
         type: choice
-        options: [dv, pd]
+        options: [DV, PD]
       project_uuid:
         description: "Wiz Project UUID to import"
         required: true
@@ -17,9 +22,26 @@ on:
 jobs:
   import:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    env:
+      TF_DIR: wiz-projects/environments/${{ inputs.environment }}
+      WIZ_CLIENT_ID: ${{ inputs.environment == 'PD' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+      WIZ_CLIENT_SECRET: ${{ inputs.environment == 'PD' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
+      PROJECT_UUID: ${{ inputs.project_uuid }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Secrets
+        run: |
+          echo "[INFO]: Validating required secrets for environment '${{ inputs.environment }}'..."
+          [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
+            echo "[ERROR]: Missing secrets for environment '${{ inputs.environment }}' - check WIZ_CLIENT_ID_${{ inputs.environment }} secrets"
+            exit 1
+          }
+          echo "[INFO]: All secrets validated ✓"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3.1.1
@@ -28,29 +50,26 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform Init
-        working-directory: wiz-projects/environments/${{ inputs.environment }}
-        env:
-          WIZ_CLIENT_ID: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-        run: terraform init -upgrade
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Initializing Terraform..."
+          terraform init -no-color
+          echo "[INFO]: Terraform initialization completed"
 
       - name: Terraform Import
-        working-directory: wiz-projects/environments/${{ inputs.environment }}
-        env:
-          WIZ_CLIENT_ID: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ inputs.environment == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
+        working-directory: ${{ env.TF_DIR }}
         run: |
           terraform import \
             -var-file="tfvars/${{ inputs.environment }}.tfvars.example" \
             wiz_project.this \
-            ${{ inputs.project_uuid }}
+            "$PROJECT_UUID"
 
       - name: Export state as JSON
-        working-directory: wiz-projects/environments/${{ inputs.environment }}
+        working-directory: ${{ env.TF_DIR }}
         run: terraform show -json > imported_state.json
 
       - name: Upload imported state artifact
         uses: actions/upload-artifact@v4
         with:
           name: wiz-imported-state-${{ inputs.environment }}
-          path: wiz-projects/environments/${{ inputs.environment }}/imported_state.json
+          path: ${{ env.TF_DIR }}/imported_state.json

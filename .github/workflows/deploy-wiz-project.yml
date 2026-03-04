@@ -1,17 +1,36 @@
-name: Deploy Wiz Project (Terraform)
+name: "deploy-wiz-project"
+run-name: Wiz Project `terraform ${{ github.event.inputs.action }} in ${{ github.event.inputs.env }}` by @${{ github.actor }}
+
+permissions:
+  contents: read
+  actions: write
 
 on:
   workflow_dispatch:
     inputs:
-      env:
-        description: "Environment to deploy"
+      action:
+        description: 'Select Terraform action to perform'
         required: true
-        default: dv
+        default: 'plan'
         type: choice
-        options: [dv, pd]
+        options:
+          - plan
+          - apply
+      env:
+        description: 'Target environment'
+        required: true
+        default: 'DV'
+        type: choice
+        options:
+          - DV
+          - PD
+      confirm_critical_op:
+        description: "Type action name to confirm (apply only)"
+        required: false
+        type: string
 
   push:
-    branches: [feature/wiz-test-project]
+    branches: [main, wiz-test-project, feature/wiz-test-project]
     paths:
       - "wiz-projects/**"
       - ".github/workflows/deploy-wiz-project.yml"
@@ -21,78 +40,101 @@ on:
       - "wiz-projects/**"
       - ".github/workflows/deploy-wiz-project.yml"
 
+env:
+  TF_DIR: wiz-projects/environments/${{ github.event.inputs.env || 'DV' }}
+
+concurrency:
+  group: wiz-project-${{ github.event.inputs.env || 'DV' }}
+  cancel-in-progress: false
+
 jobs:
-  plan:
+  wiz-project-terraform:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.env || 'DV' }}
+    timeout-minutes: 30
+    env:
+      WIZ_CLIENT_ID: ${{ github.event.inputs.env == 'PD' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
+      WIZ_CLIENT_SECRET: ${{ github.event.inputs.env == 'PD' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Secrets
+        run: |
+          echo "[INFO]: Validating required secrets for environment '${{ github.event.inputs.env || 'DV' }}'..."
+          [ -n "$WIZ_CLIENT_ID" ] && [ -n "$WIZ_CLIENT_SECRET" ] || {
+            echo "[ERROR]: Missing secrets for environment '${{ github.event.inputs.env || 'DV' }}' - check WIZ_CLIENT_ID_${{ github.event.inputs.env || 'DV' }} secrets"
+            exit 1
+          }
+          echo "[INFO]: All secrets validated ✓"
+
+      - name: Validate Apply Confirmation
+        if: github.event.inputs.action == 'apply'
+        run: |
+          if [ "${{ github.event.inputs.confirm_critical_op }}" != "apply" ]; then
+            echo "[ERROR]: You must type 'apply' to proceed with the terraform apply operation"
+            exit 1
+          fi
+          echo "[INFO]: Validated user confirmation for Apply operation"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3.1.1
         with:
           terraform_version: 1.6.6
-
-      - name: Terraform Init
-        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
-        env:
-          WIZ_CLIENT_ID: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-        run: terraform init -upgrade
 
       - name: Terraform Format Check
-        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
-        run: terraform fmt -check -recursive
-
-      - name: Terraform Validate
-        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
-        run: terraform validate
-
-      - name: Terraform Plan
-        working-directory: wiz-projects/environments/${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
-        env:
-          WIZ_CLIENT_ID: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ (github.event_name == 'workflow_dispatch' && inputs.env == 'pd') && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-          TF_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dv' }}
+        working-directory: ${{ env.TF_DIR }}
         run: |
-          terraform plan -var-file="tfvars/${TF_ENV}.tfvars.example" -out=tfplan
-
-      - name: Upload plan artifact
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.env }}
-          path: wiz-projects/environments/${{ inputs.env }}/tfplan
-
-  apply:
-    if: github.event_name == 'workflow_dispatch'
-    needs: [plan]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3.1.1
-        with:
-          terraform_version: 1.6.6
-
-      - name: Download plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.env }}
-          path: wiz-projects/environments/${{ inputs.env }}
+          if ! terraform fmt -check; then
+            echo "[ERROR]: Terraform files are not properly formatted"
+            echo "[INFO]: Run 'terraform fmt' to fix formatting"
+            exit 1
+          fi
+          echo "[INFO]: Format check passed"
 
       - name: Terraform Init
-        working-directory: wiz-projects/environments/${{ inputs.env }}
-        env:
-          WIZ_CLIENT_ID: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-        run: terraform init
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Initializing Terraform..."
+          terraform init -no-color
+          echo "[INFO]: Terraform initialization completed"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Validating Terraform configuration..."
+          terraform validate -no-color
+          echo "[INFO]: Terraform validation passed"
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Creating Terraform plan..."
+          terraform plan -no-color -detailed-exitcode \
+            -var-file="tfvars/${{ github.event.inputs.env || 'DV' }}.tfvars.example" \
+            -out=tfplan
+          echo "[INFO]: Terraform plan created"
+
+      - name: Plan Summary
+        run: |
+          echo "[INFO]: Plan outcome: ${{ steps.plan.outcome }}"
+          echo "[INFO]: Plan exit code: ${{ steps.plan.outputs.exitcode }}"
+
+          if [ "${{ steps.plan.outputs.exitcode }}" == "0" ]; then
+            echo "[INFO]: No changes required - infrastructure is up-to-date"
+          elif [ "${{ steps.plan.outputs.exitcode }}" == "2" ]; then
+            echo "[INFO]: Changes detected - ready for deployment"
+          else
+            echo "[ERROR]: Plan failed - check configuration (exit code: ${{ steps.plan.outputs.exitcode }})"
+            exit 1
+          fi
 
       - name: Terraform Apply
-        working-directory: wiz-projects/environments/${{ inputs.env }}
-        env:
-          WIZ_CLIENT_ID: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_ID_PD || secrets.WIZ_CLIENT_ID_DV }}
-          WIZ_CLIENT_SECRET: ${{ inputs.env == 'pd' && secrets.WIZ_CLIENT_SECRET_PD || secrets.WIZ_CLIENT_SECRET_DV }}
-        run: terraform apply -auto-approve tfplan
+        if: github.event.inputs.action == 'apply' && steps.plan.outputs.exitcode == '2'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "[INFO]: Applying Terraform changes..."
+          terraform apply -auto-approve -no-color tfplan
+          echo "[INFO]: Terraform apply completed successfully"
