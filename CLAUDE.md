@@ -84,31 +84,24 @@ wiz-projects/
 **Wiz Dashboard path:** GEICO (folder) → GEICO AWS (project)
 
 **What's done:**
-- `wiz-projects/environments/PD/` — stub only, needs expansion post-import
-- `.github/workflows/wiz-import.yml` — PD only, runs `terraform import` + uploads artifact
-- `.github/workflows/deploy-wiz-project.yml` — PD only, aligned with deploy-wiz-tf.yml patterns
-  - Single job, `environment: PD`
-  - `action` input (plan/apply), `confirm_critical_op` gate, `-detailed-exitcode`, Plan Summary
-  - Credentials: `WIZ_CLIENT_ID` / `WIZ_CLIENT_SECRET` (repo-level secrets)
-  - `pull_request` trigger removed (was causing secret-access issues)
-  - `actions: write` permission removed — `contents: read` only (least privilege)
-- PR broadcast for approval on work repo (`geico-private/wiz`) — all Copilot review items resolved
-  - Plan passes with correct repo-level secrets
-- macOS case-rename gotcha: use two-step `git mv dv dv_tmp && git mv dv_tmp DV` for case-only renames
-
-**`terraform import` has NOT been run yet.**
+- `wiz-projects/environments/PD/main.tf` — **fully expanded** from `imported_state.json` (parent_project_id, cloud_organization_links, risk_profile)
+- `wiz-projects/environments/PD/versions.tf` — Azure Blob backend configured (tfstatezscalergznp)
+- `.github/workflows/wiz-import.yml` — PD only, runs `terraform import` + uploads artifact; ARM_* env vars added
+- `.github/workflows/deploy-wiz-project.yml` — PD only; ARM_* env vars added; no AWS steps
+- Both workflows: `id-token: write` permission, no `terraform_version` pin, no Configure AWS step
+- Azure federated identity credential `geico-private-wiz-PD` added to App Registration
+- Secrets added to `geico-private/wiz` repo: `NP_AZURE_CLIENT_ID`, `NP_AZURE_TENANT_ID`, `NP_AZURE_SUBSCRIPTION_ID`
+- Import ran successfully — state written to Azure Blob (`wiz-project-PD.tfstate`)
+- Plan ran after import — shows **1 to change** (provider metadata only: `archive_on_delete`, `creation_method`, `is_import_module_usage`)
+- **Decision: do NOT apply to existing GEICO AWS project** — instead create a new project with different name to prove equivalence
+- `documents/terraform-wiz-concepts-2026-03-04.md` — Q&A reference doc created
 
 **Next steps (Task B):**
-1. Wait for PR approval on `geico-private/wiz`
-2. After merge, trigger import workflow (workflow_dispatch, no inputs needed beyond UUID default):
-   ```bash
-   gh workflow run "Wiz Project Import" --ref wiz-test-project
-   gh run watch
-   gh run download --name wiz-imported-state-PD --dir ./artifacts/
-   ```
-3. Use `imported_state.json` artifact to expand `PD/main.tf` with full attribute set
-4. `terraform plan` until zero changes
-5. Add remote state backend (Azure Blob or HCP Terraform) — none configured yet
+1. Delete `wiz-project-PD.tfstate` from `tfstatezscalergznp/tfstate` container in Azure Portal
+2. Update `PD.tfvars.example`: change `project_name` from `"GEICO AWS"` to `"GEICO AWS - TF Test"`
+3. Run `deploy-wiz-project` with `action: apply` + `confirm_critical_op: apply`
+4. Compare new project vs existing GEICO AWS in Wiz UI — prove equivalence
+5. After proving equivalence, move on to next Wiz resource (automation rules recommended)
 
 ---
 
@@ -116,8 +109,10 @@ wiz-projects/
 
 | Path | Purpose |
 |------|---------|
-| `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (stub, post-import) |
-| `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "GEICO AWS"` |
+| `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (fully expanded) |
+| `wiz-projects/environments/PD/versions.tf` | Azure Blob backend — tfstatezscalergznp/tfstate/wiz-project-PD.tfstate |
+| `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "GEICO AWS"` — change to "GEICO AWS - TF Test" for equivalence proof |
+| `documents/terraform-wiz-concepts-2026-03-04.md` | Q&A reference: Terraform + Wiz concepts from 2026-03-04 session |
 | `wiz-projects/modules/wiz-project/` | Reusable wiz_project module stub |
 | `wiz-projects/documents/` | Wiz provider + wiz_project schema reference docs |
 | `.github/workflows/wiz-import.yml` | Runs terraform import for PD, uploads state JSON artifact |
@@ -149,3 +144,12 @@ Secrets stored as GitHub Environment secrets under the "PD" environment:
 - `WIZ_CLIENT_ID_DV` / `WIZ_CLIENT_SECRET_DV` — exist but not properly configured; DV removed
 - `WIZ_API_URL` secret exists (not used in our provider.tf — provider resolves endpoint from creds)
 - Wiz provider env vars: `WIZ_CLIENT_ID` + `WIZ_CLIENT_SECRET` (confirmed from provider docs)
+- `NP_AZURE_CLIENT_ID` / `NP_AZURE_TENANT_ID` / `NP_AZURE_SUBSCRIPTION_ID` — added for Azure Blob backend (tfstatezscalergznp)
+
+## Azure Backend Details (Task B)
+- **Storage account:** `tfstatezscalergznp` (shared with z-vm/ZScaler project)
+- **Container:** `tfstate`
+- **State key:** `wiz-project-PD.tfstate`
+- **Auth:** `ARM_USE_OIDC=true` + `ARM_TENANT_ID` / `ARM_CLIENT_ID` / `ARM_SUBSCRIPTION_ID` env vars — no explicit Azure Login step needed
+- **Federated credential:** `geico-private-wiz-PD` added to App Registration (subject: `repo:geico-private/wiz:environment:PD`)
+- **No new infra** — reuses existing ZScaler storage account with a new blob key
