@@ -3,6 +3,7 @@ run-name: Wiz Project `terraform ${{ github.event.inputs.action }} in PD` by @${
 
 permissions:
   contents: read
+  id-token: write
 
 on:
   workflow_dispatch:
@@ -63,6 +64,13 @@ jobs:
             exit 1
           fi
           echo "[INFO]: Validated user confirmation for Apply operation"
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          role-to-assume: arn:aws:iam::018139544949:role/admin/gw-accountautomation-role
+          aws-region: us-east-1
+          role-session-name: WIZ-PROJECT-PD-${{ github.run_number }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3.1.1
