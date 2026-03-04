@@ -56,11 +56,16 @@ Work repo: `github.com/geico-private/wiz`
 - `documents/wiz_introspection_mutations.json` — mutations list only (confirms createConnector/updateConnector/deleteConnector exist)
 - `wiz_types_combined.json` — NOT YET GENERATED (needs Go tool run with real Wiz creds)
 - Python script (`wiz_graphql_debug.py`) is abandoned — Go tool replaces it entirely
+- `provider/tools/introspect/main.go` updated this session — BFS now covers read-side types:
+  - Added `fields` + `possibleTypes` to introspection query
+  - Added `Fields` + `PossibleTypes` to `WizType` struct
+  - Added `"Connector"` seed so BFS reaches `ConnectorConfigAzure` via UNION/INTERFACE possibleTypes
+- `documents/queeno_wiz_provider_analysis.md` — new: queeno/wiz provider analysis (design justification doc)
 
 **Next steps (Task A):**
-1. Copy `provider/` to work repo (`github.com/geico-private/wiz`)
+1. PR in progress on work repo to add `wiz-graphql-debug.yml` + full `provider/` folder
 2. Trigger `wiz-graphql-debug.yml` on work repo with real Wiz creds → download `wiz-introspection` artifact
-3. Use `wiz_types_combined.json` to fill in `mutations.go` and `resource.go`
+3. Use `wiz_types_combined.json` → `ConnectorConfigAzure` entry to fill in `mutations.go` and `resource.go`
 4. Wire `azure_connector.NewResource` into `provider.go` Resources()
 5. Test via `build-wiz-provider.yml` workflow
 
@@ -109,6 +114,7 @@ Work repo: `github.com/geico-private/wiz`
 | `.github/workflows/build-wiz-provider.yml` | CI: build + unit test Go provider |
 | `.github/workflows/wiz-graphql-debug.yml` | CI: run introspection tool, upload wiz-introspection artifact |
 | `documents/wiz_introspection_mutations.json` | First introspection run — mutations list only |
+| `documents/queeno_wiz_provider_analysis.md` | queeno/wiz provider analysis — design justification reference |
 | `documents/project_details.md` | Full repo architecture reference |
 | `documents/go_application_workflows.md` | GEICO GitHub Actions patterns for Go (proxy config, runner) |
 | `wiz-test-project/main.tf` | `wiz_project.this` resource (minimal — expand post-import) |
