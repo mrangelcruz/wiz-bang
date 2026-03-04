@@ -25,6 +25,8 @@ import (
 // ---------------------------------------------------------------------------
 // GraphQL introspection query — resolves a single named type with all fields.
 // Unwraps up to 4 levels of NON_NULL / LIST wrappers (sufficient for Wiz API).
+// Fetches inputFields (INPUT_OBJECT), fields (OBJECT), possibleTypes (UNION/INTERFACE),
+// and enumValues (ENUM) so the BFS covers both mutation inputs and query return types.
 // ---------------------------------------------------------------------------
 const queryIntrospectType = `
 query IntrospectType($name: String!) {
@@ -47,6 +49,26 @@ query IntrospectType($name: String!) {
           }
         }
       }
+    }
+    fields {
+      name
+      description
+      type {
+        kind name
+        ofType {
+          kind name
+          ofType {
+            kind name
+            ofType {
+              kind name
+            }
+          }
+        }
+      }
+    }
+    possibleTypes {
+      kind
+      name
     }
     enumValues {
       name
@@ -89,11 +111,13 @@ type EnumValue struct {
 }
 
 type WizType struct {
-	Name        string       `json:"name"`
-	Kind        string       `json:"kind"`
-	Description string       `json:"description"`
-	InputFields []InputField `json:"inputFields"`
-	EnumValues  []EnumValue  `json:"enumValues"`
+	Name          string       `json:"name"`
+	Kind          string       `json:"kind"`
+	Description   string       `json:"description"`
+	InputFields   []InputField `json:"inputFields"`
+	Fields        []InputField `json:"fields"`        // OBJECT types
+	PossibleTypes []TypeRef    `json:"possibleTypes"` // UNION / INTERFACE types
+	EnumValues    []EnumValue  `json:"enumValues"`
 }
 
 type introspectResponse struct {
@@ -104,11 +128,17 @@ type introspectResponse struct {
 // BFS walker
 // ---------------------------------------------------------------------------
 
-// seeds are the root input types we care about for the Azure connector.
+// seeds are the root types for BFS traversal.
+// Mutation input seeds (INPUT_OBJECT) cover create/update/delete shapes.
+// Connector (OBJECT) is the read-side return type; BFS from it discovers
+// ConnectorConfigAzure and sibling cloud config types via possibleTypes.
 var seeds = []string{
+	// Mutation inputs
 	"CreateConnectorInput",
 	"UpdateConnectorInput",
 	"DeleteConnectorInput",
+	// Read-side return type
+	"Connector",
 }
 
 func walk(ctx context.Context, c *client.Client) (map[string]*WizType, error) {
@@ -140,11 +170,26 @@ func walk(ctx context.Context, c *client.Client) (map[string]*WizType, error) {
 
 		results[name] = resp.Type
 
-		// Enqueue any nested INPUT_OBJECT or ENUM types we haven't visited yet.
+		// Enqueue nested types we haven't visited yet.
+		// inputFields → INPUT_OBJECT mutation inputs
 		for _, field := range resp.Type.InputFields {
 			leaf := field.Type.leafName()
 			if leaf != "" && !visited[leaf] && !isScalar(leaf) {
 				queue = append(queue, leaf)
+			}
+		}
+		// fields → OBJECT query return types (e.g. Connector → ConnectorConfig*)
+		for _, field := range resp.Type.Fields {
+			leaf := field.Type.leafName()
+			if leaf != "" && !visited[leaf] && !isScalar(leaf) {
+				queue = append(queue, leaf)
+			}
+		}
+		// possibleTypes → UNION / INTERFACE concrete implementations
+		// (e.g. ConnectorConfig union → ConnectorConfigAzure, ConnectorConfigAWS, ...)
+		for _, pt := range resp.Type.PossibleTypes {
+			if pt.Name != "" && !visited[pt.Name] {
+				queue = append(queue, pt.Name)
 			}
 		}
 	}
