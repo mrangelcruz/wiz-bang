@@ -40,8 +40,12 @@ jobs:
     environment: PD
     timeout-minutes: 30
     env:
-      WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-      WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
+      WIZ_CLIENT_ID:       ${{ secrets.WIZ_CLIENT_ID }}
+      WIZ_CLIENT_SECRET:   ${{ secrets.WIZ_CLIENT_SECRET }}
+      ARM_USE_OIDC:        "true"
+      ARM_TENANT_ID:       ${{ secrets.NP_AZURE_TENANT_ID }}
+      ARM_CLIENT_ID:       ${{ secrets.NP_AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.NP_AZURE_SUBSCRIPTION_ID }}
 
     steps:
       - name: Checkout
@@ -64,13 +68,6 @@ jobs:
             exit 1
           fi
           echo "[INFO]: Validated user confirmation for Apply operation"
-
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4.1.0
-        with:
-          role-to-assume: arn:aws:iam::018139544949:role/admin/gw-accountautomation-role
-          aws-region: us-east-1
-          role-session-name: WIZ-PROJECT-PD-${{ github.run_number }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3.1.1
