@@ -3,7 +3,6 @@ run-name: Wiz Project `terraform ${{ github.event.inputs.action }} in PD` by @${
 
 permissions:
   contents: read
-  actions: write
 
 on:
   workflow_dispatch:
