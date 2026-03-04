@@ -95,13 +95,13 @@ wiz-projects/
 - Plan ran after import — shows **1 to change** (provider metadata only: `archive_on_delete`, `creation_method`, `is_import_module_usage`)
 - **Decision: do NOT apply to existing GEICO AWS project** — instead create a new project with different name to prove equivalence
 - `documents/terraform-wiz-concepts-2026-03-04.md` — Q&A reference doc created
+- **EQUIVALENCE PROVEN (2026-03-04):** Deleted old state blob, set `project_name = "WIZ TEST PROJECT- GEICO AWS"`, ran `deploy-wiz-project` apply → new project created successfully and visible in Wiz Dashboard matching GEICO AWS
+- `documents/Wiz-Project-As-Code-Presentation.md` — presentation outline created for demo
 
 **Next steps (Task B):**
-1. Delete `wiz-project-PD.tfstate` from `tfstatezscalergznp/tfstate` container in Azure Portal
-2. Update `PD.tfvars.example`: change `project_name` from `"GEICO AWS"` to `"GEICO AWS - TF Test"`
-3. Run `deploy-wiz-project` with `action: apply` + `confirm_critical_op: apply`
-4. Compare new project vs existing GEICO AWS in Wiz UI — prove equivalence
-5. After proving equivalence, move on to next Wiz resource (automation rules recommended)
+1. Destroy test project `WIZ TEST PROJECT- GEICO AWS` (cleanup) — run `deploy-wiz-project` with `action: destroy`
+2. Decide: apply to real `GEICO AWS` project OR move to next Wiz resource
+3. Next recommended Wiz resource: automation rules
 
 ---
 
@@ -111,8 +111,9 @@ wiz-projects/
 |------|---------|
 | `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (fully expanded) |
 | `wiz-projects/environments/PD/versions.tf` | Azure Blob backend — tfstatezscalergznp/tfstate/wiz-project-PD.tfstate |
-| `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "GEICO AWS"` — change to "GEICO AWS - TF Test" for equivalence proof |
+| `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "WIZ TEST PROJECT- GEICO AWS"` — equivalence proof name (change back to "GEICO AWS" when applying to real project) |
 | `documents/terraform-wiz-concepts-2026-03-04.md` | Q&A reference: Terraform + Wiz concepts from 2026-03-04 session |
+| `documents/Wiz-Project-As-Code-Presentation.md` | Presentation outline: Problem → Discover → Codify → Deploy → Prove |
 | `wiz-projects/modules/wiz-project/` | Reusable wiz_project module stub |
 | `wiz-projects/documents/` | Wiz provider + wiz_project schema reference docs |
 | `.github/workflows/wiz-import.yml` | Runs terraform import for PD, uploads state JSON artifact |
