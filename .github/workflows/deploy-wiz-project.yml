@@ -27,11 +27,6 @@ on:
       - "wiz-projects/**"
       - ".github/workflows/deploy-wiz-project.yml"
 
-  pull_request:
-    paths:
-      - "wiz-projects/**"
-      - ".github/workflows/deploy-wiz-project.yml"
-
 env:
   TF_DIR: wiz-projects/environments/PD
 
