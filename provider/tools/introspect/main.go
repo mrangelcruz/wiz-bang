@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/geico-private/wiz/provider/internal/client"
 )
@@ -28,9 +29,11 @@ import (
 // Fetches inputFields (INPUT_OBJECT), fields (OBJECT), possibleTypes (UNION/INTERFACE),
 // and enumValues (ENUM) so the BFS covers both mutation inputs and query return types.
 // ---------------------------------------------------------------------------
-const queryIntrospectType = `
-query IntrospectType($name: String!) {
-  __type(name: $name) {
+// queryIntrospectTypeTemplate inlines the type name directly — the Wiz GraphQL
+// API does not apply variables to __type introspection queries.
+const queryIntrospectTypeTemplate = `
+{
+  __type(name: "%s") {
     name
     kind
     description
@@ -156,9 +159,10 @@ func walk(ctx context.Context, c *client.Client) (map[string]*WizType, error) {
 		visited[name] = true
 
 		fmt.Printf("[INFO] introspecting: %s\n", name)
+		time.Sleep(200 * time.Millisecond)
 
 		var resp introspectResponse
-		err := c.Query(ctx, queryIntrospectType, map[string]any{"name": name}, &resp)
+		err := c.Query(ctx, fmt.Sprintf(queryIntrospectTypeTemplate, name), nil, &resp)
 		if err != nil {
 			return nil, fmt.Errorf("query %s: %w", name, err)
 		}
