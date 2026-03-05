@@ -85,18 +85,18 @@ wiz-projects/
 
 **What's done:**
 - `wiz-projects/environments/PD/main.tf` — **fully expanded** from `imported_state.json` (parent_project_id, cloud_organization_links, risk_profile)
-- `wiz-projects/environments/PD/versions.tf` — Azure Blob backend configured (tfstatezscalergznp)
-- `.github/workflows/wiz-import.yml` — PD only, runs `terraform import` + uploads artifact; ARM_* env vars added
-- `.github/workflows/deploy-wiz-project.yml` — PD only; ARM_* env vars added; no AWS steps
-- Both workflows: `id-token: write` permission, no `terraform_version` pin, no Configure AWS step
-- Azure federated identity credential `geico-private-wiz-PD` added to App Registration
-- Secrets added to `geico-private/wiz` repo: `NP_AZURE_CLIENT_ID`, `NP_AZURE_TENANT_ID`, `NP_AZURE_SUBSCRIPTION_ID`
-- Import ran successfully — state written to Azure Blob (`wiz-project-PD.tfstate`)
+- `wiz-projects/environments/PD/versions.tf` — **AWS S3 backend** (geico-cloudsec-tfstate, key: wiz/wiz-project-PD.tfstate, assume_role: geico-cloudsec-tfstate-access)
+- `.github/workflows/wiz-import.yml` — PD only; `Configure AWS` + `Verify AWS Credentials` steps; ARM_* removed
+- `.github/workflows/deploy-wiz-project.yml` — PD only; `Configure AWS` + `Verify AWS Credentials` steps; ARM_* removed
+- Both workflows: `id-token: write` permission, `aws-actions/configure-aws-credentials@v4.1.0`, role: `gw-accountautomation-role`
+- Azure federated identity credential `geico-private-wiz-PD` added to App Registration (still exists, no longer used)
+- Import ran successfully (previously via Azure Blob backend)
 - Plan ran after import — shows **1 to change** (provider metadata only: `archive_on_delete`, `creation_method`, `is_import_module_usage`)
 - **Decision: do NOT apply to existing GEICO AWS project** — instead create a new project with different name to prove equivalence
 - `documents/terraform-wiz-concepts-2026-03-04.md` — Q&A reference doc created
 - **EQUIVALENCE PROVEN (2026-03-04):** Deleted old state blob, set `project_name = "WIZ TEST PROJECT- GEICO AWS"`, ran `deploy-wiz-project` apply → new project created successfully and visible in Wiz Dashboard matching GEICO AWS
 - `documents/Wiz-Project-As-Code-Presentation.md` — presentation outline created for demo
+- **Backend migrated (2026-03-05):** Azure Blob → AWS S3 to align with `terraform/environments/PD/providers.tf` reference pattern
 
 **Next steps (Task B):**
 1. Destroy test project `WIZ TEST PROJECT- GEICO AWS` (cleanup) — run `deploy-wiz-project` with `action: destroy`
@@ -110,7 +110,7 @@ wiz-projects/
 | Path | Purpose |
 |------|---------|
 | `wiz-projects/environments/PD/` | PD Terraform root — GEICO AWS (fully expanded) |
-| `wiz-projects/environments/PD/versions.tf` | Azure Blob backend — tfstatezscalergznp/tfstate/wiz-project-PD.tfstate |
+| `wiz-projects/environments/PD/versions.tf` | AWS S3 backend — geico-cloudsec-tfstate/wiz/wiz-project-PD.tfstate, assume_role: geico-cloudsec-tfstate-access |
 | `wiz-projects/environments/PD/tfvars/PD.tfvars.example` | `project_name = "WIZ TEST PROJECT- GEICO AWS"` — equivalence proof name (change back to "GEICO AWS" when applying to real project) |
 | `documents/terraform-wiz-concepts-2026-03-04.md` | Q&A reference: Terraform + Wiz concepts from 2026-03-04 session |
 | `documents/Wiz-Project-As-Code-Presentation.md` | Presentation outline: Problem → Discover → Codify → Deploy → Prove |
@@ -147,10 +147,12 @@ Secrets stored as GitHub Environment secrets under the "PD" environment:
 - Wiz provider env vars: `WIZ_CLIENT_ID` + `WIZ_CLIENT_SECRET` (confirmed from provider docs)
 - `NP_AZURE_CLIENT_ID` / `NP_AZURE_TENANT_ID` / `NP_AZURE_SUBSCRIPTION_ID` — added for Azure Blob backend (tfstatezscalergznp)
 
-## Azure Backend Details (Task B)
-- **Storage account:** `tfstatezscalergznp` (shared with z-vm/ZScaler project)
-- **Container:** `tfstate`
-- **State key:** `wiz-project-PD.tfstate`
-- **Auth:** `ARM_USE_OIDC=true` + `ARM_TENANT_ID` / `ARM_CLIENT_ID` / `ARM_SUBSCRIPTION_ID` env vars — no explicit Azure Login step needed
-- **Federated credential:** `geico-private-wiz-PD` added to App Registration (subject: `repo:geico-private/wiz:environment:PD`)
-- **No new infra** — reuses existing ZScaler storage account with a new blob key
+## AWS S3 Backend Details (Task B)
+- **Bucket:** `geico-cloudsec-tfstate`
+- **Key:** `wiz/wiz-project-PD.tfstate`
+- **Region:** `us-east-1`
+- **Assume role (backend):** `arn:aws:iam::018139544949:role/geico-cloudsec-tfstate-access`
+- **Workflow role (OIDC):** `arn:aws:iam::018139544949:role/admin/gw-accountautomation-role`
+- **Pattern:** matches `terraform/environments/PD/providers.tf` reference exactly
+- **Note:** `gw-accountautomation-role` does NOT have `s3:ListBucket` — S3 access flows through `geico-cloudsec-tfstate-access` assumed by Terraform backend internally
+- **Former Azure Blob backend** (tfstatezscalergznp) — no longer used; federated credential `geico-private-wiz-PD` still exists on App Registration
