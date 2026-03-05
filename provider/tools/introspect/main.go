@@ -228,8 +228,9 @@ func writeJSON(path string, v any) error {
 // ---------------------------------------------------------------------------
 
 func main() {
-	apiURL := flag.String("api-url", os.Getenv("WIZ_API_URL"), "Wiz GraphQL URL")
-	outDir := flag.String("out-dir", "tools/introspect/out", "Output directory for JSON files")
+	apiURL  := flag.String("api-url",  os.Getenv("WIZ_API_URL"),  "Wiz GraphQL URL")
+	authURL := flag.String("auth-url", os.Getenv("WIZ_AUTH_URL"), "Wiz OAuth2 token URL (default: https://auth.app.wiz.io/oauth/token)")
+	outDir  := flag.String("out-dir",  "tools/introspect/out",    "Output directory for JSON files")
 	flag.Parse()
 
 	clientID := os.Getenv("WIZ_CLIENT_ID")
@@ -249,7 +250,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	c, err := client.New(clientID, clientSecret, *apiURL)
+	c, err := client.NewWithAuthURL(clientID, clientSecret, *apiURL, *authURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] create client: %v\n", err)
 		os.Exit(1)

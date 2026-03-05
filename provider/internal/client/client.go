@@ -17,13 +17,17 @@ type Client struct {
 }
 
 func New(clientID, clientSecret, apiURL string) (*Client, error) {
+	return NewWithAuthURL(clientID, clientSecret, apiURL, "")
+}
+
+func NewWithAuthURL(clientID, clientSecret, apiURL, authURL string) (*Client, error) {
 	if clientID == "" || clientSecret == "" || apiURL == "" {
 		return nil, fmt.Errorf("client_id, client_secret, and api_url are all required")
 	}
 	return &Client{
 		apiURL:     apiURL,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		auth:       newAuthManager(clientID, clientSecret),
+		auth:       newAuthManager(clientID, clientSecret, authURL),
 	}, nil
 }
 

@@ -42,12 +42,19 @@ jobs:
           go-version-file: provider/go.mod
           cache-dependency-path: provider/go.sum
 
+      - name: Test Wiz Auth Connectivity
+        run: |
+          echo "=== DNS lookup ==="
+          nslookup auth.app.wiz.io || true
+          echo "=== TCP connect ==="
+          curl -v --max-time 10 https://auth.app.wiz.io/oauth/token 2>&1 || true
+
       - name: Run Introspection
         working-directory: provider
         run: |
           go run ./tools/introspect \
-            --api-url https://api.us9.app.wiz.io/graphql \
-            --out-dir ./tools/introspect/out
+            --api-url  https://api.us9.app.wiz.io/graphql \
+            --out-dir  ./tools/introspect/out
 
       - name: Upload Introspection Artifact
         uses: actions/upload-artifact@v4

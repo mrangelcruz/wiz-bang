@@ -11,20 +11,25 @@ import (
 	"time"
 )
 
-const tokenURL = "https://auth.app.wiz.io/oauth/token"
+const defaultTokenURL = "https://auth.app.wiz.io/oauth/token"
 
 type authManager struct {
 	clientID     string
 	clientSecret string
+	tokenURL     string
 	mu           sync.Mutex
 	token        string
 	expiry       time.Time
 }
 
-func newAuthManager(clientID, clientSecret string) *authManager {
+func newAuthManager(clientID, clientSecret, tokenURL string) *authManager {
+	if tokenURL == "" {
+		tokenURL = defaultTokenURL
+	}
 	return &authManager{
 		clientID:     clientID,
 		clientSecret: clientSecret,
+		tokenURL:     tokenURL,
 	}
 }
 
@@ -45,7 +50,7 @@ func (a *authManager) getToken(ctx context.Context) (string, error) {
 		"client_secret": {a.clientSecret},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("build token request: %w", err)
 	}
