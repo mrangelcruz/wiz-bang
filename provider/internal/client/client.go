@@ -57,6 +57,8 @@ func (c *Client) Query(ctx context.Context, query string, variables map[string]a
 		return fmt.Errorf("marshal request: %w", err)
 	}
 
+	fmt.Printf("[DEBUG] request body: %s\n", body)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
@@ -74,8 +76,14 @@ func (c *Client) Query(ctx context.Context, query string, variables map[string]a
 		return fmt.Errorf("HTTP %d from Wiz API", resp.StatusCode)
 	}
 
+	var rawBody bytes.Buffer
+	if _, err := rawBody.ReadFrom(resp.Body); err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+	fmt.Printf("[DEBUG] response body: %s\n", rawBody.String())
+
 	var gqlResp gqlResponse
-	if err := json.NewDecoder(resp.Body).Decode(&gqlResp); err != nil {
+	if err := json.Unmarshal(rawBody.Bytes(), &gqlResp); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
