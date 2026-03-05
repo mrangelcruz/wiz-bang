@@ -15,14 +15,12 @@ on:
 
 jobs:
   import:
-    runs-on:
-      group: "k8s-default-runner"
+    runs-on: ubuntu-latest
     environment: PD
     timeout-minutes: 30
     env:
       WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
       WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-      GOPROXY: "https://artifactory-pd-infra.aks.aze1.cloud.geico.net/artifactory/api/go/mvp-billing-golang-all"
 
     steps:
       - name: Checkout
