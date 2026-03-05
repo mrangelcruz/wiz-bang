@@ -1,0 +1,37 @@
+{
+  "name": "UpdateConnectorInput",
+  "kind": "INPUT_OBJECT",
+  "description": "",
+  "inputFields": [
+    {
+      "name": "id",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "ID",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "patch",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "INPUT_OBJECT",
+          "name": "UpdateConnectorPatch",
+          "ofType": null
+        }
+      }
+    }
+  ],
+  "fields": null,
+  "possibleTypes": null,
+  "enumValues": null
+}
+

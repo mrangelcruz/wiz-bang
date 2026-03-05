@@ -61,20 +61,31 @@ Work repo: `github.com/geico-private/wiz`
 - To restore: replace contents with original Terraform import logic once provider PR is formalized
 - Trigger: Actions UI → "Wiz Project Import" → Run workflow → branch: `wiz-azure-provider`
 
-**Introspection status:**
-- `documents/wiz_introspection_mutations.json` — mutations list only (confirms createConnector/updateConnector/deleteConnector exist)
-- `wiz_types_combined.json` — NOT YET GENERATED (needs workflow run with real Wiz creds)
+**Introspection lessons learned:**
+- **k8s runner blocks external TLS** — `wiz-import.yml` uses `ubuntu-latest` (not k8s runner); GOPROXY removed
+- **Wiz API ignores variables on `__type` queries** — query uses inline `fmt.Sprintf` instead of GraphQL variables
+- **Rate limiting** — 200ms sleep between BFS requests to avoid HTTP 429
+- Auth URL is `https://auth.app.wiz.io/oauth/token` (Wiz Commercial) — confirmed correct per docs
+
+**Introspection status: COMPLETE**
+- Ran successfully on work repo — 3500+ types discovered
+- `documents/wiz_type_ConnectorConfigAzure.json` — read-side fields ✓
+- `documents/wiz_type_CreateConnectorInput.json` — create mutation input ✓
+- `documents/wiz_type_UpdateConnectorInput.json` — update mutation input ✓
+- `documents/wiz_type_UpdateConnectorPatch.json` — NOT YET copied locally (needed next session)
+
+**Key schema findings:**
+- `CreateConnectorInput`: `name` (String!), `type` (ID!), `authParams` (JSON!), `enabled` (Bool), `extraConfig` (JSON)
+- `authParams` is an opaque JSON blob — Azure config fields go here during create/update
+- `ConnectorConfigAzure` read fields: `tenantId`, `clientId`, `clientSecret`, `isManagedIdentity`, `groupId`, `subscriptionId`, `excludedSubscriptions`, `includedSubscriptions`, `excludedManagementGroups`, `includedManagementGroups`, `includedRegions`, `excludedRegions`, `auditLogMonitorEnabled`, `networkLogMonitorEnabled`, `environment`, etc.
 
 **Next steps (Task A):**
-1. On work repo (`geico-private/wiz`): create branch `wiz-azure-provider` from main
-2. Copy `provider/` folder + `.github/workflows/wiz-import.yml` from sandbox to work repo branch
-3. Push `wiz-azure-provider` to work repo
-4. Trigger via Actions UI: "Wiz Project Import" → branch `wiz-azure-provider` → Run workflow
-5. Download `wiz-introspection` artifact
-6. Use `wiz_types_combined.json` → `ConnectorConfigAzure` entry to fill in `mutations.go` and `resource.go`
-7. Wire `azure_connector.NewResource` into `provider.go` Resources()
-8. Test via `build-wiz-provider.yml` workflow
-9. Formalize with a proper PR + dedicated workflow file; restore `wiz-import.yml` to original
+1. Copy `wiz_type_UpdateConnectorPatch.json` from artifact to `documents/`
+2. Write `mutations.go` with createConnector / updateConnector / deleteConnector + read query
+3. Write `resource.go` CRUD using the mutation structs
+4. Wire `azure_connector.NewResource` into `provider.go` Resources()
+5. Test via `build-wiz-provider.yml` workflow
+6. Formalize with a proper PR + dedicated workflow file; restore `wiz-import.yml` to original
 
 **No local Wiz creds** — all real API interaction must go through GitHub Actions on work repo.
 

@@ -1,0 +1,77 @@
+{
+  "name": "CreateConnectorInput",
+  "kind": "INPUT_OBJECT",
+  "description": "",
+  "inputFields": [
+    {
+      "name": "name",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "String",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "type",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "ID",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "enabled",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "Boolean",
+        "ofType": null
+      }
+    },
+    {
+      "name": "authParams",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "JSON",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "extraConfig",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "JSON",
+        "ofType": null
+      }
+    },
+    {
+      "name": "createOutpostLiteConfig",
+      "description": "When defined, an outpost lite will be created and attached to the connector",
+      "type": {
+        "kind": "INPUT_OBJECT",
+        "name": "OutpostLiteConfigInput",
+        "ofType": null
+      }
+    }
+  ],
+  "fields": null,
+  "possibleTypes": null,
+  "enumValues": null
+}
+

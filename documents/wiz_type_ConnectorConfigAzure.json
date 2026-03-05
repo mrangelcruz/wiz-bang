@@ -1,0 +1,278 @@
+{
+  "name": "ConnectorConfigAzure",
+  "kind": "OBJECT",
+  "description": "",
+  "inputFields": null,
+  "fields": [
+    {
+      "name": "tenantId",
+      "description": "Directory (tenant) ID",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "String",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "clientId",
+      "description": "Application (client) ID",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "clientSecret",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "isManagedIdentity",
+      "description": "",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "Boolean",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "groupId",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "subscriptionId",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "isAzureActiveDirectoryOnly",
+      "description": "Azure Active Directory Only",
+      "type": {
+        "kind": "SCALAR",
+        "name": "Boolean",
+        "ofType": null
+      }
+    },
+    {
+      "name": "monitorEventHubConnectionString",
+      "description": "Azure Monitor EventHub connection string",
+      "type": {
+        "kind": "NON_NULL",
+        "name": "",
+        "ofType": {
+          "kind": "SCALAR",
+          "name": "String",
+          "ofType": null
+        }
+      }
+    },
+    {
+      "name": "monitorVnetFlowLogsEventHubConnectionString",
+      "description": "VNet Flow Logs EventHub connection string",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "environment",
+      "description": "For sovereign clouds: AzureGermanCloud or AzureUSGovernmentCloud",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "snapshotsResourceGroupId",
+      "description": "The resource group ID where disk scan snapshots will be saved, if not defined wiz will use the resource group where\nthe disk resides",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "diskanalyzerSecretName",
+      "description": "Scanner Secret Name the secret name which was in the output of the outpost deployment script,\nand is the secret containing the client and secret of the app to which the Diskanalyzer permissions are applied.",
+      "type": {
+        "kind": "SCALAR",
+        "name": "String",
+        "ofType": null
+      }
+    },
+    {
+      "name": "excludedSubscriptions",
+      "description": "",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "includedSubscriptions",
+      "description": "",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "excludedManagementGroups",
+      "description": "",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "includedManagementGroups",
+      "description": "",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "includedRegions",
+      "description": "List of regions to include. Only resources from these regions will be fetched. Cannot be used together with excludedRegions.",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "excludedRegions",
+      "description": "List of regions to exclude. Resources from these regions will not be fetched. Cannot be used together with includedRegions.",
+      "type": {
+        "kind": "LIST",
+        "name": "",
+        "ofType": {
+          "kind": "NON_NULL",
+          "name": "",
+          "ofType": {
+            "kind": "SCALAR",
+            "name": "String",
+            "ofType": null
+          }
+        }
+      }
+    },
+    {
+      "name": "auditLogMonitorEnabled",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "Boolean",
+        "ofType": null
+      }
+    },
+    {
+      "name": "networkLogMonitorEnabled",
+      "description": "",
+      "type": {
+        "kind": "SCALAR",
+        "name": "Boolean",
+        "ofType": null
+      }
+    },
+    {
+      "name": "azureMonitorConfig",
+      "description": "",
+      "type": {
+        "kind": "OBJECT",
+        "name": "ConnectorConfigAzureMonitor",
+        "ofType": null
+      }
+    },
+    {
+      "name": "scheduledSecurityToolScanningSettings",
+      "description": "",
+      "type": {
+        "kind": "OBJECT",
+        "name": "ScheduledSecurityToolScanningSettings",
+        "ofType": null
+      }
+    },
+    {
+      "name": "costAndUsageReportConfig",
+      "description": "",
+      "type": {
+        "kind": "OBJECT",
+        "name": "AzureCostAndUsageReportConfig",
+        "ofType": null
+      }
+    }
+  ],
+  "possibleTypes": null,
+  "enumValues": null
+}
+
