@@ -42,14 +42,23 @@ jobs:
     env:
       WIZ_CLIENT_ID:       ${{ secrets.WIZ_CLIENT_ID }}
       WIZ_CLIENT_SECRET:   ${{ secrets.WIZ_CLIENT_SECRET }}
-      ARM_USE_OIDC:        "true"
-      ARM_TENANT_ID:       ${{ secrets.NP_AZURE_TENANT_ID }}
-      ARM_CLIENT_ID:       ${{ secrets.NP_AZURE_CLIENT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.NP_AZURE_SUBSCRIPTION_ID }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          role-to-assume: arn:aws:iam::018139544949:role/admin/gw-accountautomation-role
+          aws-region: us-east-1
+          role-session-name: WIZ-PD-DEPLOYMENT-${{ github.run_number }}
+
+      - name: Verify AWS Credentials
+        run: |
+          echo "[INFO]: Verifying AWS credentials..."
+          aws sts get-caller-identity
+          echo "[INFO]: AWS credentials verified ✓"
 
       - name: Validate Secrets
         run: |

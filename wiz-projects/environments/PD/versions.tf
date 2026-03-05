@@ -7,11 +7,15 @@ terraform {
     }
   }
 
-  backend "azurerm" {
-    resource_group_name  = "tfstate-np-rg"
-    storage_account_name = "tfstatezscalergznp"
-    container_name       = "tfstate"
-    key                  = "wiz-project-PD.tfstate"
-    use_oidc             = true
+  backend "s3" {
+    bucket               = "geico-cloudsec-tfstate"
+    key                  = "wiz/wiz-project-PD.tfstate"
+    region               = "us-east-1"
+    use_lockfile         = true
+    encrypt              = true
+    workspace_key_prefix = "wiz"
+    assume_role = {
+      role_arn = "arn:aws:iam::018139544949:role/geico-cloudsec-tfstate-access"
+    }
   }
 }
